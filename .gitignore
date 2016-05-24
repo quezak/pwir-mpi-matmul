@@ -1,5 +1,7 @@
 exported_tests/
 exported_tests.zip
+matrixmul
+*.o
 
 *.swp
 *.swo
