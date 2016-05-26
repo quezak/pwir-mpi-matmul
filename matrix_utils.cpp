@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <iostream>
 #include <fstream>
 #include <stdexcept>
 
@@ -34,7 +35,7 @@ double& SparseMatrix::at(int row, int col)
 }
 
 /// Return value at given coordinates.
-const double& SparseMatrix::at(int row, int col) const
+const double& SparseMatrix::get(int row, int col) const
 {
     /// Check which elements are stored in row
     int first_elem = this->ia[row];
@@ -47,12 +48,48 @@ const double& SparseMatrix::at(int row, int col) const
                                last_in_ja,
                                col);
 
-    if(it == last_in_ja){
+    if(it == last_in_ja || *it != col){
         return SparseMatrix::zero;
     }
 
     return this->a[first_elem + (it - first_in_ja)];
 
+}
+
+void SparseMatrix::set(int row, int col, double value)
+{
+    throw std::runtime_error("Thou shall not change values in the CSR matrix.");
+}
+
+SparseMatrix SparseMatrix::getRowBlock(int start, int end) const
+{
+    SparseMatrix result(end - start + 1, this->width);
+
+    // compute new ia matrix
+    result.ia.push_back(0);
+    int first_row_ia_index = this->ia[start];
+    for(auto it=this->ia.begin() + start + 1; it!=this->ia.begin() + end + 1; ++it)
+        result.ia.push_back((*it) - first_row_ia_index);
+
+    // copy non-zero values
+    result.a.resize(result.ia.back());
+    std::copy(this->a.begin() + first_row_ia_index,
+              this->a.begin() + first_row_ia_index + result.ia.back(),
+              result.a.begin());
+
+    // compute new ja matrix
+    result.ja.resize(result.ia.back());
+    std::copy(this->ja.begin() + first_row_ia_index,
+              this->ja.begin() + first_row_ia_index + result.ia.back(),
+              result.ja.begin());
+
+    return result;
+
+}
+
+SparseMatrix SparseMatrix::getColBlock(int start, int end) const
+{
+    return SparseMatrix(1,1);
 }
 
 const double SparseMatrix::zero = 0.0;

@@ -5,15 +5,22 @@
 #include "matrix_utils.hpp"
 
 void test_sparse_wikipedia(){
-    SparseMatrix sm{4,4};
+    SparseMatrix sm;
     std::ifstream file("smalltests/sparse", std::ios::in);
     file >> sm;
-    assert(sm.at(0,1) == 0);
-    assert(sm.at(1,0) == 5);
-    assert(sm.at(0,0) == 0);
-    assert(sm.at(2,2) == 3);
-    assert(sm.at(3,1) == 6);
-    assert(sm.at(3,2) == 0);
+    assert(sm.get(0,1) == 0);
+    assert(sm.get(1,0) == 5);
+    assert(sm.get(0,0) == 0);
+    assert(sm.get(2,2) == 3);
+    assert(sm.get(3,1) == 6);
+    assert(sm.get(3,2) == 0);
+
+    assert(sm.getRowBlock(1,3).get(0,0) == 5);
+    assert(sm.getRowBlock(1,3).get(0,1) == 8);
+    assert(sm.getRowBlock(1,3).get(0,2) == 0);
+    assert(sm.getRowBlock(1,3).get(0,3) == 0);
+    assert(sm.getRowBlock(1,3).get(1,0) == 0);
+    assert(sm.getRowBlock(1,3).get(1,2) == 3);
 }
 
 int main(){
