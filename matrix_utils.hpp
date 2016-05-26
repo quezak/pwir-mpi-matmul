@@ -59,6 +59,8 @@ public:
 
     virtual double& at(int row, int col) override;
     virtual const double& at(int row, int col) const override;
+
+    friend std::istream& operator>>(std::istream& input, SparseMatrix& matrix);
 };
 
 

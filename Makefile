@@ -3,12 +3,14 @@ CXX      = mpic++
 CFLAGS   = -Wall -std=c99 -O3
 CXXFLAGS = -Wall -std=c++11 -O3
 LDFLAGS  = -Wall -O3 -lstdc++
-MATMUL   = matrixmul test
+MATMUL   = matrixmul
+TEST	 = test
 DEPS     = densematgen.o matrix_utils.o
 
 all: $(MATMUL)
 
 $(TEST): $(TEST).o $(DEPS)
+	$(CXX) $(LDFLAGS) $^ -o $@
 
 $(MATMUL): $(MATMUL).o $(DEPS)
 	$(CXX) $(LDFLAGS) $^ -o $@
