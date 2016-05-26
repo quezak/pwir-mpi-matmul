@@ -6,6 +6,8 @@
 
 #include "densematgen.h"
 
+using MPI::COMM_WORLD;
+
 int main(int argc, char * argv[]) {
     int show_results = 0;
     int use_inner = 0;
@@ -22,8 +24,10 @@ int main(int argc, char * argv[]) {
     int count_ge = 0;
 
     MPI::Init(argc, argv);
-    num_processes = MPI::Comm::Get_size(MPI_COMM_WORLD);
-    mpi_rank = MPI::Comm::Get_rank(MPI_COMM_WORLD);
+    num_processes = COMM_WORLD.Get_size();
+    mpi_rank = COMM_WORLD.Get_rank();
+    // FIXME replace this
+    int *sparse = NULL;
 
 
     while ((option = getopt(argc, argv, "vis:f:c:e:g:")) != -1) {
@@ -37,7 +41,7 @@ int main(int argc, char * argv[]) {
             case 'f': 
                 if ((mpi_rank) == 0) { 
                     // FIXME: Process 0 should read the CSR sparse matrix here
-                    sparse = NULL;
+                    sparse = &mpi_rank;
                 }
                 break;
             case 'c': 
@@ -69,12 +73,12 @@ int main(int argc, char * argv[]) {
 
     comm_start =  MPI::Wtime();
     // FIXME: scatter sparse matrix; cache sparse matrix; cache dense matrix
-    MPI.COMM_WORLD.Barrier();
+    MPI::COMM_WORLD.Barrier();
     comm_end = MPI::Wtime();
 
     comp_start = MPI::Wtime();
     // FIXME: compute C = A ( A ... (AB ) )
-    MPI.COMM_WORLD.Barrier();
+    MPI::COMM_WORLD.Barrier();
     comp_end = MPI::Wtime();
 
     if (show_results) {
