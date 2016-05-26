@@ -11,5 +11,11 @@ all: $(MATMUL)
 $(MATMUL): $(MATMUL).o $(DEPS)
 	$(CXX) $(LDFLAGS) $^ -o $@
 
+%.o: %.c %.h
+	$(CC) $(CFLAGS) -c $< -o $@
+
+%.o: %.cpp %.hpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
 clean:
 	rm -f *.o *core *~ *.out *.err $(ALL)
