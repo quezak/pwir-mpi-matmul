@@ -5,12 +5,13 @@
 #include <getopt.h>
 
 #include "densematgen.h"
+#include "matrix_utils.hpp"
 
 using MPI::COMM_WORLD;
 
 int main(int argc, char * argv[]) {
-    int show_results = 0;
-    int use_inner = 0;
+    bool show_results = false;
+    bool use_inner = false;
     int gen_seed = -1;
     int repl_fact = 1;
 
@@ -21,7 +22,7 @@ int main(int argc, char * argv[]) {
     int mpi_rank = 0;
     int exponent = 1;
     double ge_element = 0;
-    int count_ge = 0;
+    bool count_ge = false;
 
     MPI::Init(argc, argv);
     num_processes = COMM_WORLD.Get_size();
@@ -33,10 +34,10 @@ int main(int argc, char * argv[]) {
     while ((option = getopt(argc, argv, "vis:f:c:e:g:")) != -1) {
         switch (option) {
             case 'v': 
-                show_results = 1; 
+                show_results = true; 
                 break;
             case 'i':
-                use_inner = 1;
+                use_inner = true;
                 break;
             case 'f': 
                 if ((mpi_rank) == 0) { 
@@ -54,7 +55,7 @@ int main(int argc, char * argv[]) {
                 exponent = atoi(optarg);
                 break;
             case 'g': 
-                count_ge = 1; 
+                count_ge = true; 
                 ge_element = atof(optarg);
                 break;
             default:
@@ -72,13 +73,21 @@ int main(int argc, char * argv[]) {
 
 
     comm_start =  MPI::Wtime();
-    // FIXME: scatter sparse matrix; cache sparse matrix; cache dense matrix
-    MPI::COMM_WORLD.Barrier();
+    // FIXME: scatter sparse matrix; cache sparse matrix
+    int size = 10;  // FIXME: get B size from A matrix
+    DenseMatrix B;
+    if (use_inner) {
+        // FIXME add B generation for innerABC
+    } else {
+        B = DenseMatrix(size, elemsForProcess(size, num_processes, mpi_rank),
+                generate_double, gen_seed);
+    }
+    COMM_WORLD.Barrier();
     comm_end = MPI::Wtime();
 
     comp_start = MPI::Wtime();
     // FIXME: compute C = A ( A ... (AB ) )
-    MPI::COMM_WORLD.Barrier();
+    COMM_WORLD.Barrier();
     comp_end = MPI::Wtime();
 
     if (show_results) {

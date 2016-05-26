@@ -13,16 +13,15 @@ using std::vector;
 /// Abstract interface for both dense and sparse matrices.
 class Matrix {
 public:
-    const int height, width;
+    int height, width;
 
     Matrix(int h, int w): height(h), width(w) {}
+    Matrix(): Matrix(0, 0) {}
+    Matrix(const Matrix &m): height(m.height), width(m.width) {}
 
     /// Return value at given coordinates.
     virtual double& at(int row, int col) = 0;
     virtual const double& at(int row, int col) const = 0;
-
-    /// Set value at given coordinates.
-    virtual void set(int row, int col, double value) = 0;
 
     class Row {
         Matrix *m;
@@ -43,6 +42,12 @@ public:
 
     /// Return matrix slice containing columns [start, end)
     virtual Matrix& getColBlock(int start, int end) const = 0;
+
+    virtual Matrix& operator= (const Matrix &m) {
+        height = m.height;
+        width = m.width;
+        return *this;
+    }
 
 };
 
@@ -73,6 +78,8 @@ public:
 
     DenseMatrix(int h, int w);
     DenseMatrix(int h, int w, MatrixGenerator gen, int seed);
+    DenseMatrix(): DenseMatrix(0, 0) {}
+    DenseMatrix(const DenseMatrix &m): Matrix(m), data(m.data) {}
 
     double& at(int row, int col) override {
         return data[row][col];
@@ -89,6 +96,22 @@ public:
     Matrix& getColBlock(int start, int end) const override {
         throw ShouldNotBeCalled("getColBlock");
     }
+
+    DenseMatrix& operator= (const DenseMatrix &m) {
+        Matrix::operator=(m);
+        data = m.data;
+        return *this;
+    }
 };
+
+
+/** Return the index of first row/column owned by rank-th process when dividing matrix of a given
+ * size into almost-equal parts. If rank > parts, it is taken modulo parts. */
+int firstIdxForProcess(int size, int parts, int rank);
+
+
+/** Return number of elements owned by rank-th process when dividing matrix of a given
+ * size into almost-equal parts. If rank > parts, it is taken modulo parts. */
+int elemsForProcess(int size, int parts, int rank);
 
 #endif  // MATRIX_UTILS_HPP
