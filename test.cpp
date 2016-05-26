@@ -21,6 +21,16 @@ void test_sparse_wikipedia(){
     assert(sm.getRowBlock(1,3).get(0,3) == 0);
     assert(sm.getRowBlock(1,3).get(1,0) == 0);
     assert(sm.getRowBlock(1,3).get(1,2) == 3);
+
+    assert(sm.getColBlock(1,3).ia[2] == 1);
+    assert(sm.getColBlock(1,3).ia[3] == 2);
+    assert(sm.getColBlock(1,3).ia[4] == 3);
+
+    assert(sm.getColBlock(1,3).get(3,0) == 6);
+    assert(sm.getColBlock(1,3).getRowBlock(1,3).get(1,1) == 3);
+
+    assert(sm.getColBlock(3,4).get(0,0) == 0);
+    assert(sm.getRowBlock(3,4).get(0,0) == 0);
 }
 
 int main(){

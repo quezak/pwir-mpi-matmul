@@ -84,12 +84,35 @@ SparseMatrix SparseMatrix::getRowBlock(int start, int end) const
               result.ja.begin());
 
     return result;
-
 }
 
 SparseMatrix SparseMatrix::getColBlock(int start, int end) const
 {
-    return SparseMatrix(1,1);
+    SparseMatrix result(this->height, end -start + 1);
+
+    int next_row = 0;
+    int already_included = 0;
+    for(int i=0; i<(int)this->a.size(); ++i)
+    {
+        while(this->ia[next_row] <= i)
+        {
+            result.ia.push_back(already_included);
+            next_row++;
+        }
+
+        if(this->ja[i] >= start && this->ja[i] < end)
+        {
+            // this element belongs to colBlock
+            result.ja.push_back(this->ja[i] - start);
+            result.a.push_back(this->a[i]);
+            ++already_included;
+        }
+    }
+
+    // If the last rows are empty, the vector has to be resized
+    result.ia.resize(this->height + 1, result.ia.back() + 1);
+
+    return result;
 }
 
 const double SparseMatrix::zero = 0.0;
