@@ -6,8 +6,6 @@
 
 #include "densematgen.h"
 
-typedef void* sparse_type;
-
 int main(int argc, char * argv[]) {
     int show_results = 0;
     int use_inner = 0;
@@ -23,11 +21,9 @@ int main(int argc, char * argv[]) {
     double ge_element = 0;
     int count_ge = 0;
 
-    sparse_type sparse = NULL;
-
-    MPI_Init(&argc, &argv);
-    MPI_Comm_size(MPI_COMM_WORLD, &num_processes);
-    MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
+    MPI::Init(argc, argv);
+    num_processes = MPI::Comm::Get_size(MPI_COMM_WORLD);
+    mpi_rank = MPI::Comm::Get_rank(MPI_COMM_WORLD);
 
 
     while ((option = getopt(argc, argv, "vis:f:c:e:g:")) != -1) {
@@ -59,27 +55,27 @@ int main(int argc, char * argv[]) {
                 break;
             default:
                 fprintf(stderr, "error parsing argument %c exiting\n", option);
-                MPI_Finalize();
+                MPI::Finalize();
                 return 3;
         }
     }
 
     if ((gen_seed == -1) || ((mpi_rank == 0) && (sparse == NULL))) {
         fprintf(stderr, "error: missing seed or sparse matrix file; exiting\n");
-        MPI_Finalize();
+        MPI::Finalize();
         return 3;
     }
 
 
-    comm_start =  MPI_Wtime();
+    comm_start =  MPI::Wtime();
     // FIXME: scatter sparse matrix; cache sparse matrix; cache dense matrix
-    MPI_Barrier(MPI_COMM_WORLD);
-    comm_end = MPI_Wtime();
+    MPI.COMM_WORLD.Barrier();
+    comm_end = MPI::Wtime();
 
-    comp_start = MPI_Wtime();
+    comp_start = MPI::Wtime();
     // FIXME: compute C = A ( A ... (AB ) )
-    MPI_Barrier(MPI_COMM_WORLD);
-    comp_end = MPI_Wtime();
+    MPI.COMM_WORLD.Barrier();
+    comp_end = MPI::Wtime();
 
     if (show_results) {
         // FIXME: replace the following line: print the whole result matrix
@@ -90,6 +86,6 @@ int main(int argc, char * argv[]) {
         printf("54\n");
     }
 
-    MPI_Finalize();
+    MPI::Finalize();
     return 0;
 }
