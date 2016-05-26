@@ -1,12 +1,11 @@
 #ifndef MATRIX_UTILS_HPP
 #define MATRIX_UTILS_HPP
 #include <string>
-#include <functional>
 
 /// Abstract interface for both dense and sparse matrices.
 class Matrix {
 public:
-    const int height, width;
+    int height, width;
 
     Matrix(int h, int w): height(h), width(w) {}
 
@@ -25,10 +24,12 @@ public:
         double& operator[](int col) {
             return m->at(index, col);
         }
+        const double& operator[](int col) const {
+            return m->at(index, col);
+        }
     };
 
-    /// Syntactic sugar: m[row][col] = v should run set(row, col).
-    // note: this probably should hava a const version, but who cares
+    /// Syntactic sugar: m[row][col] returns at(row, col)
     virtual Row operator[](int row) {
         return Row(this, row);
     }

@@ -4,7 +4,7 @@ CFLAGS   = -Wall -std=c99 -O3
 CXXFLAGS = -Wall -std=c++11 -O3
 LDFLAGS  = -Wall -O3 -lstdc++
 MATMUL   = matrixmul
-DEPS     = densematgen.o
+DEPS     = densematgen.o matrix_utils.o
 
 all: $(MATMUL)
 
