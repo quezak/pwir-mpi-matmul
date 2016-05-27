@@ -6,6 +6,10 @@
 
 #include "matrix_utils.hpp"
 
+using std::vector;
+using std::istream;
+using std::function;
+
 
 /// Abstract interface for both dense and sparse matrices.
 class Matrix {
@@ -19,6 +23,7 @@ public:
     /// Return value at given coordinates.
     virtual double& at(int row, int col) = 0;
     virtual const double& at(int row, int col) const = 0;
+    virtual double get(int row, int col) const = 0;
 
     class Row {
         Matrix *m;
@@ -34,12 +39,6 @@ public:
         return Row(this, row);
     }
 
-    /// Return matrix slice containing rows [start, end)
-    virtual Matrix& getRowBlock(int start, int end) const = 0;
-
-    /// Return matrix slice containing columns [start, end)
-    virtual Matrix& getColBlock(int start, int end) const = 0;
-
     virtual Matrix& operator= (const Matrix &m) {
         height = m.height;
         width = m.width;
@@ -54,7 +53,7 @@ private:
     vector<vector<double>> data;
 
 public:
-    typedef std::function<double(int, int, int)> MatrixGenerator;
+    typedef function<double(int, int, int)> MatrixGenerator;
 
     DenseMatrix(int h, int w);
     DenseMatrix(int h, int w, MatrixGenerator gen, int seed);
@@ -69,12 +68,8 @@ public:
         return data[row][col];
     }
 
-    Matrix& getRowBlock(int start, int end) const override {
-        throw ShouldNotBeCalled("getRowBlock");
-    }
-
-    Matrix& getColBlock(int start, int end) const override {
-        throw ShouldNotBeCalled("getColBlock");
+    double get(int row, int col) const override {
+        return data[row][col];
     }
 
     DenseMatrix& operator= (const DenseMatrix &m) {
@@ -87,24 +82,27 @@ public:
 
 class SparseMatrix : public Matrix {
 public:
-    static double const zero;
- 
-    int non_zero_elements;
-    int max_non_zero_in_row;
+    int nnz;  // number of nonzero elements
+    int max_row_nnz;
 
     SparseMatrix() : Matrix() {};
     SparseMatrix(int h, int w): Matrix(h, w) {}
 
-    /// Vector definitions available at 
-    /// https://en.wikipedia.org/wiki/Sparse_matrix
-    std::vector<double> a;
-    std::vector<int> ia, ja;
+    /// Vector definitions available at https://en.wikipedia.org/wiki/Sparse_matrix
+    vector<double> a;
+    vector<int> ia, ja;
 
-    virtual double& at(int row, int col) override;
-    virtual const double& get(int row, int col) const override;
-    virtual void set(int row, int col, double value) override;
+    virtual double& at(int row, int col) override {
+        throw ShouldNotBeCalled("at in SparseMatrix");
+    }
 
-    friend std::istream& operator>>(std::istream& input, SparseMatrix& matrix);
+    virtual const double& at(int row, int col) const override {
+        throw ShouldNotBeCalled("at in SparseMatrix");
+    }
+
+    virtual double get(int row, int col) const override;
+
+    friend istream& operator>> (istream& input, SparseMatrix& matrix);
 
     /// Return matrix slice containing rows [start, end)
     SparseMatrix getRowBlock(int start, int end) const;
