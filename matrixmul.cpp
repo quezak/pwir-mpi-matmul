@@ -5,6 +5,7 @@
 #include <getopt.h>
 
 #include "densematgen.h"
+#include "matrix.hpp"
 #include "matrix_utils.hpp"
 
 using MPI::COMM_WORLD;
