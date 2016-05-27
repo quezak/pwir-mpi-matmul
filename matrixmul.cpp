@@ -1,12 +1,12 @@
+#include <cassert>
 #include <cstdio>
 #include <cstdlib>
+#include <fstream>
 #include <mpi.h>
-#include <cassert>
 #include <getopt.h>
 
 #include "densematgen.h"
-
-typedef void* sparse_type;
+#include "matrix_utils.hpp"
 
 int main(int argc, char * argv[]) {
     int show_results = 0;
@@ -23,12 +23,13 @@ int main(int argc, char * argv[]) {
     double ge_element = 0;
     int count_ge = 0;
 
-    sparse_type sparse = NULL;
+    bool sparse = false;
 
     MPI_Init(&argc, &argv);
     MPI_Comm_size(MPI_COMM_WORLD, &num_processes);
     MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
 
+    SparseMatrix sm;
 
     while ((option = getopt(argc, argv, "vis:f:c:e:g:")) != -1) {
         switch (option) {
@@ -40,8 +41,12 @@ int main(int argc, char * argv[]) {
                 break;
             case 'f': 
                 if ((mpi_rank) == 0) { 
-                    // FIXME: Process 0 should read the CSR sparse matrix here
-                    sparse = NULL;
+                    std::string filename(optarg);
+                    std::ifstream file(filename, std::ios::in);
+                    file >> sm;
+
+                    if(sm.height > 0)
+                        sparse = true;
                 }
                 break;
             case 'c': 
@@ -64,14 +69,26 @@ int main(int argc, char * argv[]) {
         }
     }
 
-    if ((gen_seed == -1) || ((mpi_rank == 0) && (sparse == NULL))) {
+    if ((gen_seed == -1) || ((mpi_rank == 0) && (!sparse))) {
         fprintf(stderr, "error: missing seed or sparse matrix file; exiting\n");
         MPI_Finalize();
         return 3;
     }
 
+    SparseMatrixToSend toSend;
+
+    if(mpi_rank == 0){
+        toSend.fill(sm, repl_fact, num_processes);
+    }
+
+    std::vector<double> mya;
+    std::vector<int> myja, myia;
 
     comm_start =  MPI_Wtime();
+
+    SparseMatrix sparse_part = toSend.scatterv(mya, myia, myja,
+                                               num_processes, repl_fact, mpi_rank);
+
     // FIXME: scatter sparse matrix; cache sparse matrix; cache dense matrix
     MPI_Barrier(MPI_COMM_WORLD);
     comm_end = MPI_Wtime();
@@ -93,3 +110,4 @@ int main(int argc, char * argv[]) {
     MPI_Finalize();
     return 0;
 }
+

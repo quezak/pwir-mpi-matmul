@@ -8,6 +8,11 @@ void test_sparse_wikipedia(){
     SparseMatrix sm;
     std::ifstream file("smalltests/sparse", std::ios::in);
     file >> sm;
+    assert(sm.height == 4);
+    assert(sm.width == 4);
+    assert(sm.non_zero_elements == 4);
+    assert(sm.max_non_zero_in_row == 2);
+
     assert(sm.get(0,1) == 0);
     assert(sm.get(1,0) == 5);
     assert(sm.get(0,0) == 0);
@@ -31,6 +36,8 @@ void test_sparse_wikipedia(){
 
     assert(sm.getColBlock(3,4).get(0,0) == 0);
     assert(sm.getRowBlock(3,4).get(0,0) == 0);
+
+    printSparseMatrix(sm);
 }
 
 int main(){
