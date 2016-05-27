@@ -4,7 +4,7 @@
 #include <iostream>
 #include <functional>
 
-#include "matrix_utils.hpp"
+#include "utils.hpp"
 
 using std::vector;
 using std::istream;
