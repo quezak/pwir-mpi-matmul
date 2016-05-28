@@ -90,12 +90,19 @@ public:
     int nnz;  // number of nonzero elements
     int max_row_nnz;
 
-    SparseMatrix() : Matrix() {};
+    /// Zero-size matrix
+    SparseMatrix() : Matrix() {}
+    /// Empty h x w matrix
     SparseMatrix(int h, int w): Matrix(h, w) {}
+    /// Initialize matrix from vectors used for scattering
+    SparseMatrix(int h, int w, int _nnz,
+            vector<double>::const_iterator a_it,
+            vector<int>::const_iterator ij_it);
 
-    /// Vector definitions available at https://en.wikipedia.org/wiki/Sparse_matrix
-    vector<double> a;
-    vector<int> ia, ja;
+    /// Vector definitions available at 
+    // https://en.wikipedia.org/wiki/Sparse_matrix#Compressed_sparse_row_.28CSR.2C_CRS_or_Yale_format.29
+    vector<double> a;  // size: nnz
+    vector<int> ia, ja;  // ia size: h+1, ja size: nnz
 
     virtual double& at(int row, int col) override {
         throw ShouldNotBeCalled("at in SparseMatrix");
@@ -114,6 +121,10 @@ public:
 
     /// Return matrix slice containing columns [start, end)
     SparseMatrix getColBlock(int start, int end) const;
+
+    /// Append a submatrix to vectors that can be used for scattering
+    void appendToVectors(vector<double>& a_v, vector<int>& a_count_v, vector<int>& a_pos_v,
+            vector<int>& ij_v, vector<int>& ij_count_v, vector<int>& ij_pos_v);
 };
 
 #endif  // MATRIX_HPP

@@ -6,6 +6,9 @@
 
 using namespace std;
 
+
+// ----------------------------------------------------------------------------------------------
+
 DenseMatrix::DenseMatrix(int h, int w): Matrix(h, w), data(h*w) {}
 
 
@@ -15,6 +18,7 @@ DenseMatrix::DenseMatrix(int h, int w, MatrixGenerator gen, int seed): DenseMatr
             at(i, j) = gen(seed, i, j);
 }
 
+// ----------------------------------------------------------------------------------------------
 
 istream& operator>>(istream& input, SparseMatrix& m) {
     input >> m.height >> m.width;
@@ -38,6 +42,7 @@ istream& operator>>(istream& input, SparseMatrix& m) {
     return input;
 }
 
+
 /// Return value at given coordinates.
 double SparseMatrix::get(int row, int col) const {
     // Check which elements are stored in row
@@ -54,6 +59,7 @@ double SparseMatrix::get(int row, int col) const {
     return a[first_elem + (it - first_in_ja)];
 
 }
+
 
 SparseMatrix SparseMatrix::getRowBlock(int start, int end) const {
     SparseMatrix result(end - start + 1, width);
@@ -79,6 +85,7 @@ SparseMatrix SparseMatrix::getRowBlock(int start, int end) const {
     return result;
 }
 
+
 SparseMatrix SparseMatrix::getColBlock(int start, int end) const {
     SparseMatrix result(height, end - start + 1);
 
@@ -101,3 +108,29 @@ SparseMatrix SparseMatrix::getColBlock(int start, int end) const {
     return result;
 }
 
+
+void SparseMatrix::appendToVectors(vector<double>& a_v, vector<int>& a_count_v, vector<int>& a_pos_v,
+        vector<int>& ij_v, vector<int>& ij_count_v, vector<int>& ij_pos_v) {
+    a_pos_v.push_back(a_v.size());  // the a vector for this submatrix starts at this position
+    a_count_v.push_back(a.size());
+    a_v.insert(a_v.end(), a.begin(), a.end());
+
+    ij_pos_v.push_back(ij_v.size());
+    ij_count_v.push_back(ia.size() + ja.size());
+    ij_v.insert(ij_v.end(), ia.begin(), ia.end());  // ia first, as it has a fixed size
+    ij_v.insert(ij_v.end(), ja.begin(), ja.end());
+}
+
+
+SparseMatrix::SparseMatrix(int h, int w, int _nnz,
+        vector<double>::const_iterator a_it,
+        vector<int>::const_iterator ij_it): SparseMatrix(h, w) {
+    nnz = _nnz;
+    a = vector<double>(a_it, a_it + nnz);
+    ia = vector<int>(ij_it, ij_it + height + 1);
+    max_row_nnz = 0;
+    for (int i = 1; i < (int) ia.size(); ++i)
+        if (ia[i] - ia[i-1] > max_row_nnz)
+            max_row_nnz = ia[i] - ia[i-1];
+    ja = vector<int>(ij_it + height + 1, ij_it + height + 1 + nnz);
+}
