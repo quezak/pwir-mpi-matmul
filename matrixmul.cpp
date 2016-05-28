@@ -3,6 +3,7 @@
 #include <iostream>
 
 #include "densematgen.h"
+#include "matmul_algo.hpp"
 #include "matrix.hpp"
 #include "matrix_utils.hpp"
 #include "utils.hpp"
@@ -58,18 +59,25 @@ int main(int argc, char * argv[]) {
 
     // ------- compute C -------
     double comp_start = MPI::Wtime();
-    // FIXME: compute C = A ( A ... (AB ) )
+    DenseMatrix C;
+    if (Flags::use_inner) {
+        C = matmulInnerABC(A, B, Flags::exponent, Flags::repl);
+    } else {
+        C = matmulColumnA(A, B, Flags::exponent, Flags::repl);
+    }
     COMM_WORLD.Barrier();
     double comp_end = MPI::Wtime();
     if (isMainProcess())
         cerr << "Computation time: " << fixed << (comp_end - comp_start) << "s" << endl;
 
     if (Flags::show_results) {
-        // FIXME: replace the following line: print the whole result matrix
         if (DEBUG) {
             if (isMainProcess()) { DBG cerr << "---- B ----" << endl; }
             gatherAndShow(B);
         }
+        if (isMainProcess()) { DBG cerr << "---- C ----" << endl; }
+        // TODO if use_inner
+        gatherAndShow(C);
     }
     if (Flags::count_ge) {
         // FIXME: replace the following line: count ge elements

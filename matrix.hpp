@@ -36,12 +36,23 @@ public:
     public:
         Row(Matrix *_m, int row): m(_m), index(row) {}
         double& operator[] (int col) { return m->at(index, col); }
+    };
+
+    class ConstRow {
+        const Matrix *m;
+        const int index;
+    public:
+        ConstRow(const Matrix *_m, int row): m(_m), index(row) {}
         const double& operator[] (int col) const { return m->at(index, col); }
     };
 
     /// Syntactic sugar: m[row][col] returns at(row, col)
     virtual Row operator[] (int row) {
         return Row(this, row);
+    }
+
+    virtual ConstRow operator[] (int row) const {
+        return ConstRow(this, row);
     }
 
     virtual Matrix& operator= (const Matrix &m) {
@@ -106,13 +117,11 @@ public:
 
 
 class SparseMatrix : public Matrix {
-protected:
+public:
     /// Vector definitions available at 
     // https://en.wikipedia.org/wiki/Sparse_matrix#Compressed_sparse_row_.28CSR.2C_CRS_or_Yale_format.29
     vector<double> a;  // size: nnz
     vector<int> ia, ja;  // ia size: h+1, ja size: nnz
-
-public:
     int nnz;  // number of nonzero elements
 
     /// Zero-size matrix
@@ -136,9 +145,6 @@ public:
     }
 
     virtual double get(int row, int col) const override;
-
-    friend istream& operator>> (istream& input, SparseMatrix& matrix);
-    friend class DenseMatrix;
 
     /// Return matrix slice containing rows [start, end)
     SparseMatrix getRowBlock(int start, int end) const;

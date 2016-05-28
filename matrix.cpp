@@ -10,7 +10,7 @@ using namespace std;
 // ----------------------------------------------------------------------------------------------
 
 DenseMatrix::DenseMatrix(int h, int w): Matrix(h, w) {
-    data.resize(h*w);
+    data.resize(h*w, 0.0);
 }
 
 
@@ -55,7 +55,7 @@ istream& operator>>(istream& input, SparseMatrix& m) {
 void Matrix::print(ostream &output) const {
     for (int i = 0; i < height; ++i) {
         for (int j = 0; j < width; ++j)
-            output << setprecision(7) << setw(8) << get(i, j);
+            output << fixed << setprecision(5) << setw(10) << get(i, j);
         output << endl;
     }
 }
