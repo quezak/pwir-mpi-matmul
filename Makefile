@@ -1,12 +1,21 @@
 CC       = mpicc
 CXX      = mpic++
-CFLAGS   = -Wall -std=c99 -O3
-CXXFLAGS = -Wall -std=c++11 -O3
-LDFLAGS  = -Wall -O3 -lstdc++
+ALLFLAGS = -Wall -O3
+CFLAGS   = $(ALLFLAGS) -std=c99
+CXXFLAGS = $(ALLFLAGS) -std=c++11
+LDFLAGS  = $(ALLFLAGS) -std=c++11
 MATMUL   = matrixmul
 DEPS     = densematgen.o matrix_utils.o matrix.o utils.o
+DEPFILE  = .dependencies
 
-all: $(MATMUL)
+all:
+	$(MAKE) $(MAKEOPTS) $(DEPFILE)
+	$(MAKE) $(MAKEOPTS) $(MATMUL)
+
+$(DEPFILE): *.cpp *.hpp *.c *.h
+	$(CXX) -MM *.cpp *.c > $@
+
+include $(DEPFILE)
 
 $(MATMUL): $(MATMUL).o $(DEPS)
 	$(CXX) $(LDFLAGS) $^ -o $@
