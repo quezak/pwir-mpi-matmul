@@ -13,7 +13,7 @@ using namespace std;
 
 // Extract parts of the code for readability
 DenseMatrix generateBFragment();
-void splitAndScatterA();
+SparseMatrix splitAndScatter(const SparseMatrix &m);
 
 
 int main(int argc, char * argv[]) {
@@ -34,13 +34,23 @@ int main(int argc, char * argv[]) {
         MPI::Finalize();
         return 4;
     }
+    if (DEBUG && isMainProcess()) {
+        DenseMatrix denseA(A);
+        DBG cerr << "---- unsparsed A ----" << endl;
+        cerr << denseA;
+    }
     Flags::size = A.height;  // the matrices are square and equal in size
-    COMM_WORLD.Bcast(&Flags::size, 1, MPI_INT, MAIN_PROCESS);
+    COMM_WORLD.Bcast(&Flags::size, 1, MPI::INT, MAIN_PROCESS);  // All processes need the size
 
     // ------ scatter data -------
     double comm_start =  MPI::Wtime();
     DenseMatrix B = generateBFragment();
-    splitAndScatterA();
+    A = splitAndScatter(A);
+    if (DEBUG) {
+        DenseMatrix densePartA(A);
+        if (isMainProcess()) { DBG cerr << "---- unsparsed unscattered A ----" << endl; }
+        gatherAndShow(densePartA);
+    }
     COMM_WORLD.Barrier();
     double comm_end = MPI::Wtime();
     if (isMainProcess())
@@ -56,8 +66,8 @@ int main(int argc, char * argv[]) {
 
     if (Flags::show_results) {
         // FIXME: replace the following line: print the whole result matrix
-        DBG {
-            if (isMainProcess()) cerr << "---- B ----" << endl;
+        if (DEBUG) {
+            if (isMainProcess()) { DBG cerr << "---- B ----" << endl; }
             gatherAndShow(B);
         }
     }
@@ -78,8 +88,4 @@ DenseMatrix generateBFragment() {
                 generate_double, Flags::gen_seed,
                 0, firstIdxForProcess(Flags::size, Flags::procs, Flags::rank));
     }
-}
-
-
-void splitAndScatterA() {
 }

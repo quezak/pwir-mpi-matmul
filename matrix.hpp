@@ -12,6 +12,10 @@ using std::ostream;
 using std::function;
 
 
+class DenseMatrix;
+class SparseMatrix;
+
+
 /// Abstract interface for both dense and sparse matrices.
 class Matrix {
 public:
@@ -72,6 +76,8 @@ public:
     DenseMatrix(int h, int w, MatrixGenerator gen, int seed, int rowOffset, int colOffset);
     /// Copy
     DenseMatrix(const DenseMatrix &m): Matrix(m), data(m.data) {}
+    /// Convert sparse to dense for debugging purposes
+    explicit DenseMatrix(const SparseMatrix &m);
 
     double& at(int row, int col) override {
         return data[index(row, col)];
@@ -108,7 +114,6 @@ protected:
 
 public:
     int nnz;  // number of nonzero elements
-    int max_row_nnz;
 
     /// Zero-size matrix
     SparseMatrix() : Matrix() {}
@@ -120,7 +125,7 @@ public:
             vector<int>::const_iterator ij_it);
     /// Copy
     SparseMatrix(const SparseMatrix &m):
-        Matrix(m), a(m.a), ia(m.ia), ja(m.ja), nnz(m.nnz), max_row_nnz(m.max_row_nnz) {}
+        Matrix(m), a(m.a), ia(m.ia), ja(m.ja), nnz(m.nnz) {}
 
     virtual double& at(int row, int col) override {
         throw ShouldNotBeCalled("at in SparseMatrix");
@@ -133,6 +138,7 @@ public:
     virtual double get(int row, int col) const override;
 
     friend istream& operator>> (istream& input, SparseMatrix& matrix);
+    friend class DenseMatrix;
 
     /// Return matrix slice containing rows [start, end)
     SparseMatrix getRowBlock(int start, int end) const;
@@ -147,7 +153,6 @@ public:
     SparseMatrix& operator= (const SparseMatrix &m) {
         Matrix::operator=(m);
         nnz = m.nnz;
-        max_row_nnz = m.max_row_nnz;
         a = m.a;
         ia = m.ia;
         ja = m.ja;

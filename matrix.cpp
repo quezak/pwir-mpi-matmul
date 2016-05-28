@@ -21,11 +21,18 @@ DenseMatrix::DenseMatrix(int h, int w, MatrixGenerator gen, int seed,
             at(i, j) = gen(seed, i+rowOffset, j+colOffset);
 }
 
+DenseMatrix::DenseMatrix(const SparseMatrix &m): DenseMatrix(m.height, m.width) {
+    for (int row = 0; row < height; ++row)
+        for (int i = m.ia[row]; i < m.ia[row+1]; ++i)
+            at(row, m.ja[i]) = m.a[i];
+}
+
 // ----------------------------------------------------------------------------------------------
 
 istream& operator>>(istream& input, SparseMatrix& m) {
     input >> m.height >> m.width;
-    input >> m.nnz >> m.max_row_nnz;
+    int max_row_nnz;  // ignored, not useful for now
+    input >> m.nnz >> max_row_nnz;
     m.a.resize(m.nnz);
     m.ia.resize(m.height + 1);
     m.ja.resize(m.nnz);
@@ -48,7 +55,7 @@ istream& operator>>(istream& input, SparseMatrix& m) {
 void Matrix::print(ostream &output) const {
     for (int i = 0; i < height; ++i) {
         for (int j = 0; j < width; ++j)
-            output << setprecision(4) << setw(6) << get(i, j);
+            output << setprecision(7) << setw(8) << get(i, j);
         output << endl;
     }
 }
@@ -85,7 +92,7 @@ double SparseMatrix::get(int row, int col) const {
 
 
 SparseMatrix SparseMatrix::getRowBlock(int start, int end) const {
-    SparseMatrix result(end - start + 1, width);
+    SparseMatrix result(end - start, width);
 
     // compute new ia vector
     result.ia.push_back(0);
@@ -110,23 +117,24 @@ SparseMatrix SparseMatrix::getRowBlock(int start, int end) const {
 
 
 SparseMatrix SparseMatrix::getColBlock(int start, int end) const {
-    SparseMatrix result(height, end - start + 1);
+    SparseMatrix result(height, end - start);
 
     int next_row = 0;
-    int already_included = 0;
-    for(int i=0; i<(int)a.size(); ++i) {
-        while(ia[next_row] <= i) {
-            result.ia.push_back(already_included);
+    int count = 0;
+    for (int i = 0; i < (int) a.size(); ++i) {
+        while (ia[next_row] <= i) {
+            result.ia.push_back(count);
             next_row++;
         }
-        if(ja[i] >= start && ja[i] < end) {  // this element belongs to colBlock
+        if (ja[i] >= start && ja[i] < end) {  // this element belongs to colBlock
             result.ja.push_back(ja[i] - start);
             result.a.push_back(a[i]);
-            ++already_included;
+            ++count;
         }
     }
     // If the last rows are empty, the vector has to be resized
-    result.ia.resize(height + 1, result.ia.back() + 1);
+    result.ia.resize(height + 1, count);
+    result.nnz = count;
 
     return result;
 }
@@ -151,9 +159,5 @@ SparseMatrix::SparseMatrix(int h, int w, int _nnz,
     nnz = _nnz;
     a = vector<double>(a_it, a_it + nnz);
     ia = vector<int>(ij_it, ij_it + height + 1);
-    max_row_nnz = 0;
-    for (int i = 1; i < (int) ia.size(); ++i)
-        if (ia[i] - ia[i-1] > max_row_nnz)
-            max_row_nnz = ia[i] - ia[i-1];
     ja = vector<int>(ij_it + height + 1, ij_it + height + 1 + nnz);
 }
