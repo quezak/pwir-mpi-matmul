@@ -17,6 +17,7 @@ bool Flags::count_ge = false;
 double Flags::ge_element = 0;
 int Flags::exponent = 1;
 string Flags::sparse_filename = "";
+int Flags::size = NOT_SET;
 
 
 bool Flags::parseArgv(int argc, char **argv) {

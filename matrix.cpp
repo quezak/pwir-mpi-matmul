@@ -6,10 +6,7 @@
 
 using namespace std;
 
-DenseMatrix::DenseMatrix(int h, int w): Matrix(h, w), data(h) {
-    for (int i = 0; i < h; ++i)
-        data[i].resize(w);
-}
+DenseMatrix::DenseMatrix(int h, int w): Matrix(h, w), data(h*w) {}
 
 
 DenseMatrix::DenseMatrix(int h, int w, MatrixGenerator gen, int seed): DenseMatrix(h, w) {

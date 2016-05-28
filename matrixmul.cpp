@@ -28,6 +28,7 @@ int main(int argc, char * argv[]) {
         MPI::Finalize();
         return 4;
     }
+    Flags::size = A.height;  // the matrices are square and equal in size
 
     // ------ scatter data -------
     double comm_start =  MPI::Wtime();

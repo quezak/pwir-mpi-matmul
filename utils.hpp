@@ -38,6 +38,7 @@ public:
     static double ge_element;
     static int exponent;
     static string sparse_filename;
+    static int size;
 
     /// Process all the commandline options, return true if successful
     static bool parseArgv(int argc, char **argv);

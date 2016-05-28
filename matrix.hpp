@@ -50,7 +50,12 @@ public:
 
 class DenseMatrix : public Matrix {
 private:
-    vector<vector<double>> data;
+    /// Data is stored in one vector as a sequence of columns, to make sending data easier.
+    vector<double> data;
+
+    int index(int row, int col) const { return row * height + col; }
+    int iRow(int index) const { return index / height; }
+    int iCol(int index) const { return index % height; }
 
 public:
     typedef function<double(int, int, int)> MatrixGenerator;
@@ -61,15 +66,15 @@ public:
     DenseMatrix(const DenseMatrix &m): Matrix(m), data(m.data) {}
 
     double& at(int row, int col) override {
-        return data[row][col];
+        return data[index(row, col)];
     }
 
     const double& at(int row, int col) const override {
-        return data[row][col];
+        return data[index(row, col)];
     }
 
     double get(int row, int col) const override {
-        return data[row][col];
+        return data[index(row, col)];
     }
 
     DenseMatrix& operator= (const DenseMatrix &m) {
