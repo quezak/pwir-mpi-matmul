@@ -6,6 +6,12 @@
 
 using std::string;
 
+#ifndef DEBUG
+#define DEBUG 0
+#endif
+
+#define DBG if (DEBUG) cerr << "[" << Flags::rank << "] "; if (DEBUG)
+#define IMHIR cerr << __FILE__ << ":" << __LINE__ << endl
 
 class Exception: public std::exception {
 private:
@@ -45,5 +51,6 @@ public:
 };
 
 bool isMainProcess();
+extern const int MAIN_PROCESS;
 
 #endif  // UTILS_HPP

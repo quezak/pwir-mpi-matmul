@@ -10,6 +10,12 @@
 using MPI::COMM_WORLD;
 using namespace std;
 
+
+// Extract parts of the code for readability
+DenseMatrix generateBFragment();
+void splitAndScatterA();
+
+
 int main(int argc, char * argv[]) {
 
     MPI::Init(argc, argv);
@@ -29,29 +35,31 @@ int main(int argc, char * argv[]) {
         return 4;
     }
     Flags::size = A.height;  // the matrices are square and equal in size
+    COMM_WORLD.Bcast(&Flags::size, 1, MPI_INT, MAIN_PROCESS);
 
     // ------ scatter data -------
     double comm_start =  MPI::Wtime();
-    DenseMatrix B;
-    if (Flags::use_inner) {
-        throw ShouldNotBeCalled("B generation for innerABC");
-    } else {
-        B = DenseMatrix(A.height, elemsForProcess(A.height, Flags::procs, Flags::rank),
-                generate_double, Flags::gen_seed);
-    }
+    DenseMatrix B = generateBFragment();
+    splitAndScatterA();
     COMM_WORLD.Barrier();
     double comm_end = MPI::Wtime();
-    cerr << "Initial communication time: " << (comm_end -  comm_start) << "s" << endl;
+    if (isMainProcess())
+        cerr << "Initial communication time: " << fixed << (comm_end -  comm_start) << "s" << endl;
 
     // ------- compute C -------
     double comp_start = MPI::Wtime();
     // FIXME: compute C = A ( A ... (AB ) )
     COMM_WORLD.Barrier();
     double comp_end = MPI::Wtime();
-    cerr << "Computation time: " << (comp_end - comp_start) << "s" << endl;
+    if (isMainProcess())
+        cerr << "Computation time: " << fixed << (comp_end - comp_start) << "s" << endl;
 
     if (Flags::show_results) {
         // FIXME: replace the following line: print the whole result matrix
+        DBG {
+            if (isMainProcess()) cerr << "---- B ----" << endl;
+            gatherAndShow(B);
+        }
     }
     if (Flags::count_ge) {
         // FIXME: replace the following line: count ge elements
@@ -59,4 +67,19 @@ int main(int argc, char * argv[]) {
 
     MPI::Finalize();
     return 0;
+}
+
+
+DenseMatrix generateBFragment() {
+    if (Flags::use_inner) {
+        throw ShouldNotBeCalled("B generation for innerABC");
+    } else {
+        return DenseMatrix(Flags::size, idxsForProcess(Flags::size, Flags::procs, Flags::rank),
+                generate_double, Flags::gen_seed,
+                0, firstIdxForProcess(Flags::size, Flags::procs, Flags::rank));
+    }
+}
+
+
+void splitAndScatterA() {
 }

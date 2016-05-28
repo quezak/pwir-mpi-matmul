@@ -1,6 +1,6 @@
 CC       = mpicc
 CXX      = mpic++
-ALLFLAGS = -Wall -O3
+ALLFLAGS = -Wall -g -DDEBUG=1
 CFLAGS   = $(ALLFLAGS) -std=c99
 CXXFLAGS = $(ALLFLAGS) -std=c++11
 LDFLAGS  = $(ALLFLAGS) -std=c++11
@@ -27,4 +27,4 @@ $(MATMUL): $(MATMUL).o $(DEPS)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:
-	rm -f *.o *core *~ *.out *.err $(ALL)
+	rm -f *.o *core *~ *.out *.err $(MATMUL)

@@ -8,6 +8,7 @@
 
 using std::vector;
 using std::istream;
+using std::ostream;
 using std::function;
 
 
@@ -45,24 +46,31 @@ public:
         return *this;
     }
 
+    virtual void print(ostream& output) const;
+
 };
 
 
 class DenseMatrix : public Matrix {
-private:
+protected:
     /// Data is stored in one vector as a sequence of columns, to make sending data easier.
     vector<double> data;
 
-    int index(int row, int col) const { return row * height + col; }
+    int index(int row, int col) const { return col * height + row; }
     int iRow(int index) const { return index / height; }
     int iCol(int index) const { return index % height; }
 
 public:
     typedef function<double(int, int, int)> MatrixGenerator;
 
-    DenseMatrix(int h, int w);
-    DenseMatrix(int h, int w, MatrixGenerator gen, int seed);
+    /// Zero-size matrix
     DenseMatrix(): DenseMatrix(0, 0) {}
+    /// Empty h x w matrix
+    DenseMatrix(int h, int w);
+    /// h x w matrix filled with a generator function.
+    /// Offsets denote the coordinates of the upper-left corner when generating a submatrix.
+    DenseMatrix(int h, int w, MatrixGenerator gen, int seed, int rowOffset, int colOffset);
+    /// Copy
     DenseMatrix(const DenseMatrix &m): Matrix(m), data(m.data) {}
 
     double& at(int row, int col) override {
@@ -82,10 +90,22 @@ public:
         data = m.data;
         return *this;
     }
+
+    void print(ostream& output) const override;
+
+    double* rawData() { return data.data(); }
+
+    int elems() { return data.size(); }
 };
 
 
 class SparseMatrix : public Matrix {
+protected:
+    /// Vector definitions available at 
+    // https://en.wikipedia.org/wiki/Sparse_matrix#Compressed_sparse_row_.28CSR.2C_CRS_or_Yale_format.29
+    vector<double> a;  // size: nnz
+    vector<int> ia, ja;  // ia size: h+1, ja size: nnz
+
 public:
     int nnz;  // number of nonzero elements
     int max_row_nnz;
@@ -98,11 +118,9 @@ public:
     SparseMatrix(int h, int w, int _nnz,
             vector<double>::const_iterator a_it,
             vector<int>::const_iterator ij_it);
-
-    /// Vector definitions available at 
-    // https://en.wikipedia.org/wiki/Sparse_matrix#Compressed_sparse_row_.28CSR.2C_CRS_or_Yale_format.29
-    vector<double> a;  // size: nnz
-    vector<int> ia, ja;  // ia size: h+1, ja size: nnz
+    /// Copy
+    SparseMatrix(const SparseMatrix &m):
+        Matrix(m), a(m.a), ia(m.ia), ja(m.ja), nnz(m.nnz), max_row_nnz(m.max_row_nnz) {}
 
     virtual double& at(int row, int col) override {
         throw ShouldNotBeCalled("at in SparseMatrix");
@@ -125,6 +143,25 @@ public:
     /// Append a submatrix to vectors that can be used for scattering
     void appendToVectors(vector<double>& a_v, vector<int>& a_count_v, vector<int>& a_pos_v,
             vector<int>& ij_v, vector<int>& ij_count_v, vector<int>& ij_pos_v);
+
+    SparseMatrix& operator= (const SparseMatrix &m) {
+        Matrix::operator=(m);
+        nnz = m.nnz;
+        max_row_nnz = m.max_row_nnz;
+        a = m.a;
+        ia = m.ia;
+        ja = m.ja;
+        return *this;
+    }
+
+    void print(ostream& output) const override;
 };
+
+istream& operator>> (istream& input, SparseMatrix& m);
+template<class T>
+auto operator<< (std::ostream& os, const T& t) -> decltype(t.print(os), os) {
+    t.print(os); 
+    return os; 
+} 
 
 #endif  // MATRIX_HPP

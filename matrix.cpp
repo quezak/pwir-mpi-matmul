@@ -2,20 +2,23 @@
 
 #include <algorithm>
 #include <fstream>
-#include <stdexcept>
+#include <iomanip>
 
 using namespace std;
 
 
 // ----------------------------------------------------------------------------------------------
 
-DenseMatrix::DenseMatrix(int h, int w): Matrix(h, w), data(h*w) {}
+DenseMatrix::DenseMatrix(int h, int w): Matrix(h, w) {
+    data.resize(h*w);
+}
 
 
-DenseMatrix::DenseMatrix(int h, int w, MatrixGenerator gen, int seed): DenseMatrix(h, w) {
+DenseMatrix::DenseMatrix(int h, int w, MatrixGenerator gen, int seed,
+        int rowOffset, int colOffset): DenseMatrix(h, w) {
     for (int i = 0; i < h; ++i)
         for (int j = 0; j < w; ++j)
-            at(i, j) = gen(seed, i, j);
+            at(i, j) = gen(seed, i+rowOffset, j+colOffset);
 }
 
 // ----------------------------------------------------------------------------------------------
@@ -42,6 +45,26 @@ istream& operator>>(istream& input, SparseMatrix& m) {
     return input;
 }
 
+void Matrix::print(ostream &output) const {
+    for (int i = 0; i < height; ++i) {
+        for (int j = 0; j < width; ++j)
+            output << setprecision(4) << setw(6) << get(i, j);
+        output << endl;
+    }
+}
+
+void SparseMatrix::print(ostream &output) const {
+    DBG output << "sparse " << height << "x" << width << ", nnz=" << nnz << endl;
+    Matrix::print(output);
+}
+
+
+void DenseMatrix::print(ostream &output) const {
+    DBG output << "dense " << height << " x " << width << endl;
+    Matrix::print(output);
+}
+
+// ----------------------------------------------------------------------------------------------
 
 /// Return value at given coordinates.
 double SparseMatrix::get(int row, int col) const {

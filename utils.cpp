@@ -70,5 +70,7 @@ bool Flags::parseArgv(int argc, char **argv) {
 
 
 bool isMainProcess() {
-    return Flags::rank == 0;
+    return Flags::rank == MAIN_PROCESS;
 }
+
+const int MAIN_PROCESS = 0;
