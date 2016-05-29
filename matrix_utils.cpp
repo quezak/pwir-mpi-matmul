@@ -23,6 +23,11 @@ int idxsForProcess(int size, int parts, int rank) {
 }
 
 
+int maxIdxsForProcess(int size, int parts) {
+    return idxsForProcess(size, parts, parts-1);
+}
+
+
 bool readSparseMatrix(const string &filename, SparseMatrix &matrix) {
     ifstream input(filename);
     if (!input.is_open()) {
@@ -55,12 +60,13 @@ void gatherAndShow(DenseMatrix &m) {
         COMM_WORLD.Gatherv(m.rawData(), m.elems(), MPI::DOUBLE,
                 recvM.rawData(), counts.data(), displs.data(), MPI::DOUBLE,
                 MAIN_PROCESS);
-        cout << recvM;
+        // TODO change stream
+        cerr << recvM;
     }
 }
 
 
-SparseMatrix splitAndScatter(const SparseMatrix &m) {
+SparseMatrix splitAndScatter(const SparseMatrix &m, vector<int> &nnzs) {
     int partNnz = 0;
     int n = Flags::size;
     int p = Flags::procs;
@@ -68,9 +74,9 @@ SparseMatrix splitAndScatter(const SparseMatrix &m) {
     vector<int> ij_v;
 
     if (!isMainProcess()) {
-        COMM_WORLD.Scatter(NULL, 0, MPI::INT,
-                &partNnz, 1, MPI::INT,
-                MAIN_PROCESS);
+        nnzs.resize(p);
+        COMM_WORLD.Bcast(nnzs.data(), p, MPI::INT, MAIN_PROCESS);
+        partNnz = nnzs[Flags::rank];
         a_v.resize(partNnz);
         ij_v.resize(partNnz + n + 1);
         COMM_WORLD.Scatterv(NULL, NULL, NULL, MPI::DOUBLE,
@@ -82,26 +88,32 @@ SparseMatrix splitAndScatter(const SparseMatrix &m) {
     } else {
         vector<double> all_a_v;
         vector<int> all_ij_v;
-        vector<int> a_counts, a_displs, ij_counts, ij_displs;
+        vector<int> a_displs, ij_counts, ij_displs;
+        nnzs.clear();  // use nnzs instead of a_counts as it will be needed by everyone
+        all_a_v.reserve(m.nnz);
+        all_ij_v.reserve(m.nnz + p * (m.height + 1));
+        nnzs.reserve(p);
+        a_displs.reserve(p);
+        ij_counts.reserve(p);
+        ij_displs.reserve(p);
         for (int i = 0; i < p; ++i) {
             int start = firstIdxForProcess(n, p, i);
             int end = start + idxsForProcess(n, p, i);
             SparseMatrix partM = m.getColBlock(start, end);
-            partM.appendToVectors(all_a_v, a_counts, a_displs,
+            partM.appendToVectors(all_a_v, nnzs, a_displs,
                     all_ij_v, ij_counts, ij_displs);
         }
-        COMM_WORLD.Scatter(a_counts.data(), 1, MPI::INT,
-                &partNnz, 1, MPI::INT,
-                MAIN_PROCESS);
+        COMM_WORLD.Bcast(nnzs.data(), p, MPI::INT, MAIN_PROCESS);
+        partNnz = nnzs[Flags::rank];
         //DBG cerr << "all a size: " << all_a_v.size() << endl;
-        //DBG cerr << "a_counts:  " << a_counts;
+        DBG cerr << "nnzs:  " << nnzs;
         //DBG cerr << "a_displs:  " << a_displs;
         //DBG cerr << "all ij size: " << all_ij_v.size() << endl;
         //DBG cerr << "ij_counts:  " << ij_counts;
         //DBG cerr << "ij_displs:  " << ij_displs;
         a_v.resize(partNnz);
         ij_v.resize(partNnz + n + 1);
-        COMM_WORLD.Scatterv(all_a_v.data(), a_counts.data(), a_displs.data(), MPI::DOUBLE,
+        COMM_WORLD.Scatterv(all_a_v.data(), nnzs.data(), a_displs.data(), MPI::DOUBLE,
                 a_v.data(), partNnz, MPI::DOUBLE,
                 MAIN_PROCESS);
         COMM_WORLD.Scatterv(all_ij_v.data(), ij_counts.data(), ij_displs.data(), MPI::INT,

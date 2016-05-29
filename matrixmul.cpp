@@ -14,7 +14,6 @@ using namespace std;
 
 // Extract parts of the code for readability
 DenseMatrix generateBFragment();
-SparseMatrix splitAndScatter(const SparseMatrix &m);
 
 
 int main(int argc, char * argv[]) {
@@ -46,7 +45,8 @@ int main(int argc, char * argv[]) {
     // ------ scatter data -------
     double comm_start =  MPI::Wtime();
     DenseMatrix B = generateBFragment();
-    A = splitAndScatter(A);
+    vector<int> nnzs;
+    A = splitAndScatter(A, nnzs);
     if (DEBUG) {
         DenseMatrix densePartA(A);
         if (isMainProcess()) { DBG cerr << "---- unsparsed unscattered A ----" << endl; }
@@ -63,7 +63,7 @@ int main(int argc, char * argv[]) {
     if (Flags::use_inner) {
         C = matmulInnerABC(A, B, Flags::exponent, Flags::repl);
     } else {
-        C = matmulColumnA(A, B, Flags::exponent, Flags::repl);
+        C = matmulColumnA(A, B, Flags::exponent, Flags::repl, nnzs);
     }
     COMM_WORLD.Barrier();
     double comp_end = MPI::Wtime();

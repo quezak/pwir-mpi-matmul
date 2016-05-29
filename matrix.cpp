@@ -140,14 +140,18 @@ SparseMatrix SparseMatrix::getColBlock(int start, int end) const {
 }
 
 
-void SparseMatrix::appendToVectors(vector<double>& a_v, vector<int>& a_count_v, vector<int>& a_pos_v,
-        vector<int>& ij_v, vector<int>& ij_count_v, vector<int>& ij_pos_v) {
+void SparseMatrix::appendToVectors(vector<double> &a_v, vector<int> &a_count_v, vector<int> &a_pos_v,
+        vector<int> &ij_v, vector<int> &ij_count_v, vector<int> &ij_pos_v) const {
     a_pos_v.push_back(a_v.size());  // the a vector for this submatrix starts at this position
     a_count_v.push_back(a.size());
-    a_v.insert(a_v.end(), a.begin(), a.end());
-
     ij_pos_v.push_back(ij_v.size());
     ij_count_v.push_back(ia.size() + ja.size());
+    appendToVectors(a_v, ij_v);
+}
+
+
+void SparseMatrix::appendToVectors(vector<double> &a_v, vector<int> &ij_v) const {
+    a_v.insert(a_v.end(), a.begin(), a.end());
     ij_v.insert(ij_v.end(), ia.begin(), ia.end());  // ia first, as it has a fixed size
     ij_v.insert(ij_v.end(), ja.begin(), ja.end());
 }

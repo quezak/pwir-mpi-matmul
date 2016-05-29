@@ -152,9 +152,12 @@ public:
     /// Return matrix slice containing columns [start, end)
     SparseMatrix getColBlock(int start, int end) const;
 
-    /// Append a submatrix to vectors that can be used for scattering
-    void appendToVectors(vector<double>& a_v, vector<int>& a_count_v, vector<int>& a_pos_v,
-            vector<int>& ij_v, vector<int>& ij_count_v, vector<int>& ij_pos_v);
+    /// Output a submatrix to vectors that can be used for scattering
+    void appendToVectors(vector<double> &a_v, vector<int> &a_count_v, vector<int> &a_pos_v,
+            vector<int> &ij_v, vector<int> &ij_count_v, vector<int> &ij_pos_v) const;
+
+    /// Output a submatrix to vectors for communicting a single submatrix
+    void appendToVectors(vector<double> &a_v, vector<int> &ij_v) const;
 
     SparseMatrix& operator= (const SparseMatrix &m) {
         Matrix::operator=(m);

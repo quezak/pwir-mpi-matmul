@@ -53,4 +53,10 @@ public:
 bool isMainProcess();
 extern const int MAIN_PROCESS;
 
+
+enum MSG_TAGS {
+    ROTATE_SPARSE_A,
+    ROTATE_SPARSE_IJ
+};
+
 #endif  // UTILS_HPP

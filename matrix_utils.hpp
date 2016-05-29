@@ -20,6 +20,11 @@ int firstIdxForProcess(int size, int parts, int rank);
 int idxsForProcess(int size, int parts, int rank);
 
 
+/// Return maximum number of elements owned by any process. In current implementation that's the
+/// last one.
+int maxIdxsForProcess(int size, int parts);
+
+
 /// Read a sparse matrix from file, return true if successful
 bool readSparseMatrix(const string &filename, SparseMatrix &m);
 
@@ -45,6 +50,6 @@ ostream& operator<< (ostream& output, const vector<T> &v) {
 /// Split a sparse matrix into parts and distribute it among processes.
 /// @param m a sparse matrix, nonempty only for scatter root
 /// @return i-th column block (as sparse submatrix) of matrix m for process i
-SparseMatrix splitAndScatter(const SparseMatrix &m);
+SparseMatrix splitAndScatter(const SparseMatrix &m, vector<int> &nnzs);
 
 #endif  // MATRIX_UTILS_HPP
