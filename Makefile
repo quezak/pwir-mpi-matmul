@@ -5,7 +5,7 @@ CFLAGS   = $(ALLFLAGS) -std=c99
 CXXFLAGS = $(ALLFLAGS) -std=c++11
 LDFLAGS  = $(ALLFLAGS) -std=c++11
 MATMUL   = matrixmul
-DEPS     = densematgen.o matrix_utils.o matrix.o utils.o matmul_algo.o
+DEPS     = densematgen.o matrix_utils.o matrix.o utils.o multiplicator.o
 DEPFILE  = .dependencies
 
 all:

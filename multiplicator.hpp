@@ -1,5 +1,5 @@
-#ifndef MATMUL_INNER_HPP
-#define MATMUL_INNER_HPP
+#ifndef MULTIPLICATOR_HPP
+#define MULTIPLICATOR_HPP
 #include <vector>
 
 #include "matrix.hpp"
@@ -34,4 +34,4 @@ public:
 };
 
 
-#endif  // MATMUL_INNER_HPP
+#endif  // MULTIPLICATOR_HPP

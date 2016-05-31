@@ -2,9 +2,9 @@
 #include <cassert>
 #include <iostream>
 
-#include "matmul_algo.hpp"
 #include "matrix.hpp"
 #include "matrix_utils.hpp"
+#include "multiplicator.hpp"
 #include "utils.hpp"
 
 using MPI::COMM_WORLD;

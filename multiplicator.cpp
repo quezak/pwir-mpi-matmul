@@ -1,4 +1,4 @@
-#include "matmul_algo.hpp"
+#include "multiplicator.hpp"
 #include <algorithm>
 #include <mpi.h>
 
