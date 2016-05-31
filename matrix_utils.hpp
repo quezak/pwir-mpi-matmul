@@ -52,4 +52,8 @@ ostream& operator<< (ostream& output, const vector<T> &v) {
 /// @return i-th column block (as sparse submatrix) of matrix m for process i
 SparseMatrix splitAndScatter(const SparseMatrix &m, vector<int> &nnzs);
 
+
+DenseMatrix generateBFragment();
+
+
 #endif  // MATRIX_UTILS_HPP

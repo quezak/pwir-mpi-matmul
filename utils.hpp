@@ -26,7 +26,13 @@ public:
 
 class ShouldNotBeCalled: public Exception {
 public:
-    ShouldNotBeCalled(const string& s): Exception(s) {}
+    ShouldNotBeCalled(const string &s): Exception(s) {}
+};
+
+
+class RuntimeError: public Exception {
+public:
+    RuntimeError(const string &s): Exception(s) {}
 };
 
 

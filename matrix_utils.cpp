@@ -2,6 +2,7 @@
 #include <fstream>
 #include <mpi.h>
 
+#include "densematgen.h"
 #include "matrix.hpp"
 #include "utils.hpp"
 
@@ -124,3 +125,17 @@ SparseMatrix splitAndScatter(const SparseMatrix &m, vector<int> &nnzs) {
     int width = idxsForProcess(n, p, Flags::rank);
     return SparseMatrix(n, width, partNnz, a_v.begin(), ij_v.begin());
 }
+
+
+// Extract parts of the code for readability
+DenseMatrix generateBFragment() {
+    if (Flags::use_inner) {
+        throw ShouldNotBeCalled("B generation for innerABC");
+    } else {
+        return DenseMatrix(Flags::size, idxsForProcess(Flags::size, Flags::procs, Flags::rank),
+                generate_double, Flags::gen_seed,
+                0, firstIdxForProcess(Flags::size, Flags::procs, Flags::rank));
+    }
+}
+
+
