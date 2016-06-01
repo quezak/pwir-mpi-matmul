@@ -13,6 +13,7 @@ using namespace std;
 
 int main(int argc, char * argv[]) {
 
+    // ------- init args and mpi -----
     MPI::Init(argc, argv);
     Flags::procs = COMM_WORLD.Get_size();
     Flags::rank = COMM_WORLD.Get_rank();
@@ -21,7 +22,17 @@ int main(int argc, char * argv[]) {
         MPI::Finalize();
         return 3;
     }
-
+    if (Flags::repl > 1) {
+        // Communicator to replicate data (processes will have the same part of A)
+        // Unneded if no replication is done
+        int repl_id = Flags::rank % (Flags::procs / Flags::repl);
+        Flags::repl_comm = COMM_WORLD.Split(repl_id, Flags::rank);
+    }
+    // Communicator to rotate data (processes will have different parts, and together the whole A)
+    // Will be just one comm if c=1
+    int group_id = Flags::rank / (Flags::procs / Flags::repl);
+    Flags::group_comm = COMM_WORLD.Split(group_id, Flags::rank);
+    
     // ------- read CSR --------
     SparseMatrix A;
     if (isMainProcess() && !readSparseMatrix(Flags::sparse_filename, A)) {
@@ -46,6 +57,14 @@ int main(int argc, char * argv[]) {
         DenseMatrix densePartA(A);
         if (isMainProcess()) { DBG cerr << "---- unsparsed unscattered A ----" << endl; }
         gatherAndShow(densePartA);
+    }
+    if (Flags::repl > 1) {
+        A = replicateA(A, nnzs);
+        if (DEBUG && isMainGroup()) {
+            DenseMatrix densePartA(A);
+            if (isMainProcess()) { DBG cerr << "---- unsparsed unscattered replicated A ----" << endl; }
+            gatherAndShow(densePartA, Flags::procs/Flags::repl, Flags::group_comm);
+        }
     }
     Multiplicator mult(A, B, nnzs);
     COMM_WORLD.Barrier();

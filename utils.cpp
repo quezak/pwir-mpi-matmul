@@ -18,6 +18,8 @@ double Flags::ge_element = 0;
 int Flags::exponent = 1;
 string Flags::sparse_filename = "";
 int Flags::size = NOT_SET;
+MPI::Intracomm Flags::group_comm;
+MPI::Intracomm Flags::repl_comm;
 
 
 bool Flags::parseArgv(int argc, char **argv) {
@@ -73,4 +75,17 @@ bool isMainProcess() {
     return Flags::rank == MAIN_PROCESS;
 }
 
+
 const int MAIN_PROCESS = 0;
+
+
+int groupId() {
+    return Flags::rank / Flags::repl;
+}
+
+
+bool isMainGroup() {
+    return groupId() == MAIN_PROCESS / Flags::repl;
+}
+
+

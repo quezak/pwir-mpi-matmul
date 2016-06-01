@@ -3,6 +3,7 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <mpi.h>
 
 #include "matrix.hpp"
 
@@ -20,6 +21,10 @@ int firstIdxForProcess(int size, int parts, int rank);
 int idxsForProcess(int size, int parts, int rank);
 
 
+/// Return number of elements owned by processes from start (inclusive) to end (exclusive)
+int idxsForProcesses(int size, int parts, int start, int end);
+
+
 /// Return maximum number of elements owned by any process. In current implementation that's the
 /// last one.
 int maxIdxsForProcess(int size, int parts);
@@ -32,6 +37,7 @@ bool readSparseMatrix(const string &filename, SparseMatrix &m);
 /// Gather and show a dense matrix. Assumes it's divided equally between processes.
 /// @param m dense matrix column block.
 void gatherAndShow(DenseMatrix &m);
+void gatherAndShow(DenseMatrix &m, int parts, MPI::Intracomm &comm);
 
 
 template<class T>
@@ -51,6 +57,11 @@ ostream& operator<< (ostream& output, const vector<T> &v) {
 /// @param m a sparse matrix, nonempty only for scatter root
 /// @return i-th column block (as sparse submatrix) of matrix m for process i
 SparseMatrix splitAndScatter(const SparseMatrix &m, vector<int> &nnzs);
+
+
+/// @param m rank-th block(row|col) of matrix A divided into p parts
+/// @return the appropriate part of matrix A divided and replicated into p/c parts
+SparseMatrix replicateA(const SparseMatrix &m, vector<int> &nnzs);
 
 
 DenseMatrix generateBFragment();

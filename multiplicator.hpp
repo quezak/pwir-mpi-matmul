@@ -13,8 +13,9 @@ private:
     int c;  // replication
     int p;  // num_processes
     int n;  // main matrix size
-    int rank = Flags::NOT_SET;
+    int g_rank = Flags::NOT_SET;  // rank inside the rotation group
     int part_id = Flags::NOT_SET;
+    int parts = Flags::NOT_SET;
 
     void mulColA();
     void rotateColA();

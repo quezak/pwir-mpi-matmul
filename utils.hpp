@@ -3,6 +3,7 @@
 
 #include <string>
 #include <exception>
+#include <mpi.h>
 
 using std::string;
 
@@ -51,6 +52,8 @@ public:
     static int exponent;
     static string sparse_filename;
     static int size;
+    static MPI::Intracomm group_comm;  // processes which have different data (and together have the whole matrix)
+    static MPI::Intracomm repl_comm;  // processes which have the same replicated data
 
     /// Process all the commandline options, return true if successful
     static bool parseArgv(int argc, char **argv);
@@ -64,5 +67,11 @@ enum MSG_TAGS {
     ROTATE_SPARSE_A,
     ROTATE_SPARSE_IJ
 };
+
+// id of the replication group in which the process is
+int groupId();
+
+bool isMainGroup();
+
 
 #endif  // UTILS_HPP
