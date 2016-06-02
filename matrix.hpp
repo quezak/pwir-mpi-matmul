@@ -113,6 +113,8 @@ public:
     double* rawData() { return data.data(); }
 
     int elems() { return data.size(); }
+
+    friend void gatherAndShow(DenseMatrix &m, int parts, MPI::Intracomm &comm);
 };
 
 

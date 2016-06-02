@@ -10,25 +10,67 @@ using namespace std;
 using MPI::COMM_WORLD;
 
 
-int firstIdxForProcess(int size, int parts, int rank) {
-    int numSmaller = parts - (size % parts);  // number of parts that are smaller by one element
-    return (size / parts) * rank + (rank > numSmaller ? rank - numSmaller : 0);
-}
+// sizes and offsets of matrix blocks that will be given initially (with c=1), indexed by rank
+static vector<int> small_part_sizes, small_part_displs;
+// sizes and offsets of matrix blocks after replication, indexed by rank inside "rotation group"
+static vector<int> repl_part_sizes, repl_part_displs;
 
 
-int idxsForProcess(int size, int parts, int rank) {
+static int idxsForProcess(int size, int parts, int rank) {
     int numSmaller = parts - (size % parts);  // number of parts that are smaller by one element
     return (size / parts) + (rank >= numSmaller ? 1 : 0);
 }
 
 
-int idxsForProcesses(int size, int parts, int start, int end) {
-    return firstIdxForProcess(size, parts, end) - firstIdxForProcess(size, parts, start);
+void initPartSizes() {
+    if (!small_part_sizes.empty()) return;
+    int p = Flags::procs;
+    int c = Flags::repl;
+    int n = Flags::size;
+    ONE_DBG cerr << "p=" << p << "  c=" << c << "  n=" << n << endl;
+    for (int i = 0; i < p; ++i)
+        small_part_sizes.push_back(idxsForProcess(n, p, i));
+    int sum = 0;
+    small_part_displs.resize(p, 0);
+    // Reorder the parts a bit -- it doesn't change the result (each process multiplies by
+    // all block columns), but will make easier to replicate later
+    for (int imod = 0; imod < p/c; ++imod) {
+        for (int i = imod; i < p; i += p/c) {
+            small_part_displs[i] = sum;
+            sum += small_part_sizes[i];
+        }
+    }
+    small_part_displs.push_back(sum);
+    ONE_DBG cerr << " small_part_sizes: " << small_part_sizes;
+    ONE_DBG cerr << "small_part_displs: " << small_part_displs;
+    if (c == 1) {
+        repl_part_sizes = small_part_sizes;
+        repl_part_displs = small_part_displs;
+    } else {
+        repl_part_displs = vector<int>(small_part_displs.begin(), small_part_displs.begin() + p/c);
+        repl_part_displs.push_back(sum);
+        for (int i = 0; i < p/c; ++i)
+            repl_part_sizes.push_back(repl_part_displs[i+1] - repl_part_displs[i]);
+        ONE_DBG cerr << "  repl_part_sizes: " <<  repl_part_sizes;
+        ONE_DBG cerr << " repl_part_displs: " <<  repl_part_displs;
+    }
 }
 
 
-int maxIdxsForProcess(int size, int parts) {
-    return idxsForProcess(size, parts, parts-1);
+int partSize(bool repl, int i) {
+    if (!repl) return small_part_sizes[i];
+    return repl_part_sizes[i];
+}
+
+
+int partStart(bool repl, int i) {
+    if (!repl) return small_part_displs[i];
+    return repl_part_displs[i];
+}
+
+
+int partEnd(bool repl, int i) {
+    return partStart(repl, i) + partSize(repl, i);
 }
 
 
@@ -56,18 +98,19 @@ void gatherAndShow(DenseMatrix &m, int parts, MPI::Intracomm &comm) {
                 NULL, NULL, NULL, MPI::DOUBLE,  // recv params are irrelevant for other processes
                 MAIN_PROCESS);
     } else {
-        const int p = Flags::procs;
         const int n = Flags::size;
         DenseMatrix recvM(n, n);
         vector<int> counts(parts);
-        int part_size = p / parts;
         for (int i = 0; i < parts; ++i)
-            counts[i] = n * idxsForProcesses(n, p, i * part_size, (i+1) * part_size);
-        vector<int> displs(Flags::procs);
+            counts[i] = n * partSize((parts < Flags::procs), i);
+        vector<int> displs(parts);
         displs[0] = 0;
         for (int i = 1; i < parts; ++i)
             displs[i] = displs[i-1] + counts[i-1];
-        comm.Gatherv(m.rawData(), m.elems(), MPI::DOUBLE,
+        DBG cerr << "elems: " << m.elems() << "  parts: " << parts << "  comm size: " << comm.Get_size() 
+            << "  counts: " << counts << "  displs: " << displs;
+        copy(m.data.begin(), m.data.end(), recvM.data.begin());
+        comm.Gatherv(MPI::IN_PLACE, 0 /*ignored*/, MPI::DOUBLE,
                 recvM.rawData(), counts.data(), displs.data(), MPI::DOUBLE,
                 MAIN_PROCESS);
         // TODO change stream
@@ -80,7 +123,6 @@ SparseMatrix splitAndScatter(const SparseMatrix &m, vector<int> &nnzs) {
     int partNnz = 0;
     int n = Flags::size;
     int p = Flags::procs;
-    int c = Flags::repl;
     vector<double> a_v;
     vector<int> ij_v;
 
@@ -107,21 +149,18 @@ SparseMatrix splitAndScatter(const SparseMatrix &m, vector<int> &nnzs) {
         a_displs.reserve(p);
         ij_counts.reserve(p);
         ij_displs.reserve(p);
-        // Reorder the parts a bit -- it doesn't change the result (each process multiplies by
-        // all block columns), but will make easier to replicate later
-        for (int imod = 0; imod < p/c; ++imod) {
-            for (int i = imod; i < p; i += p/c) {
-                int start = firstIdxForProcess(n, p, i);
-                int end = start + idxsForProcess(n, p, i);
-                SparseMatrix partM = m.getColBlock(start, end);
-                partM.appendToVectors(all_a_v, nnzs, a_displs,
-                        all_ij_v, ij_counts, ij_displs);
-            }
+        for (int i = 0; i < p; ++i) {
+            int start = partStart(false, i);
+            int end = partEnd(false, i);
+            ONE_DBG cerr << "part: " << i << "  start: " << start << "  end: " << end << endl;
+            SparseMatrix partM = m.getColBlock(start, end);
+            partM.appendToVectors(all_a_v, nnzs, a_displs,
+                    all_ij_v, ij_counts, ij_displs);
         }
         COMM_WORLD.Bcast(nnzs.data(), p, MPI::INT, MAIN_PROCESS);
         partNnz = nnzs[Flags::rank];
         //DBG cerr << "all a size: " << all_a_v.size() << endl;
-        DBG cerr << "nnzs:  " << nnzs;
+        ONE_DBG cerr << "nnzs:  " << nnzs;
         //DBG cerr << "a_displs:  " << a_displs;
         //DBG cerr << "all ij size: " << all_ij_v.size() << endl;
         //DBG cerr << "ij_counts:  " << ij_counts;
@@ -136,7 +175,7 @@ SparseMatrix splitAndScatter(const SparseMatrix &m, vector<int> &nnzs) {
                 MAIN_PROCESS);
     }
 
-    int width = idxsForProcess(n, p, Flags::rank);
+    int width = partSize(false, Flags::rank);
     return SparseMatrix(n, width, partNnz, a_v.begin(), ij_v.begin());
 }
 
@@ -180,7 +219,7 @@ SparseMatrix replicateA(const SparseMatrix &m, vector<int> &nnzs) {
     m.appendToVectors(a_v, ij_v);
     a_v.insert(a_v.end(), a_displs[c] - a_displs[repl_rank+1], 0.0);
     ij_v.insert(ij_v.end(), ij_displs[c] - ij_displs[repl_rank+1], 0.0);
-    DBG cerr << "a_v size: " << a_v.size() << "  ij_v size: " << ij_v.size()
+    ONE_DBG cerr << "a_v size: " << a_v.size() << "  ij_v size: " << ij_v.size()
         << "  sumnnz: " << sumnnz << "  sumijcount: " << sumijcount << endl;
     // Share the subparts
     Flags::repl_comm.Allgatherv(MPI::IN_PLACE, 0 /*ignored*/, MPI::DOUBLE,
@@ -195,19 +234,19 @@ SparseMatrix replicateA(const SparseMatrix &m, vector<int> &nnzs) {
     for (int part = 0; part < c; ++part) {
         for (int i = 0; i < n+1; ++i)
             new_ij_v[i] += ij_v[i + ij_displs[part]];
-        int offset = idxsForProcesses(n, p, c * groupId(), c * groupId() + part);
+        int offset = partStart(false, c * groupId() + part) - partStart(false, c * groupId());
         for (int i = ij_displs[part] + n + 1; i < ij_displs[part+1]; ++i)
             new_ij_v.push_back(ij_v[i] + offset);
     }
-    DBG cerr << "new_ij_v size: " << new_ij_v.size() << "  a_v_size+n+1: " << a_v.size() + n + 1
-        << endl;
+    ONE_DBG cerr << "new_ij_v size: " << new_ij_v.size() << "  a_v_size+n+1: "
+        << a_v.size() + n + 1 << endl;
     // calculate new nnzs
     vector<int> new_nnzs(p/c, 0);
     for (int i = 0; i < (int) nnzs.size(); ++i)
         new_nnzs[i % (p/c)] += nnzs[i];
     nnzs = new_nnzs;
     // Finally, return the replicated part of A
-    int width = idxsForProcesses(n, p, groupId() * c, (groupId() + 1) * c);
+    int width = partSize(true, groupId());
     return SparseMatrix(n, width, nnzs[groupId()], a_v.begin(), ij_v.begin());
 }
 
@@ -216,9 +255,9 @@ DenseMatrix generateBFragment() {
     if (Flags::use_inner) {
         throw ShouldNotBeCalled("B generation for innerABC");
     } else {
-        return DenseMatrix(Flags::size, idxsForProcess(Flags::size, Flags::procs, Flags::rank),
+        return DenseMatrix(Flags::size, partSize(false, Flags::rank),
                 generate_double, Flags::gen_seed,
-                0, firstIdxForProcess(Flags::size, Flags::procs, Flags::rank));
+                0, partStart(false, Flags::rank));
     }
 }
 

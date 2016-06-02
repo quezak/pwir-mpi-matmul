@@ -8,7 +8,6 @@
 using MPI::COMM_WORLD;
 using namespace std;
 
-
 DenseMatrix Multiplicator::matmulInnerABC(int exponent, int replication) {
     throw ShouldNotBeCalled("innerABC not yet implemented");
 }
@@ -17,15 +16,15 @@ DenseMatrix Multiplicator::matmulInnerABC(int exponent, int replication) {
 DenseMatrix Multiplicator::matmulColumnA(int exponent, int replication) {
     c = replication;
     parts = p/c;
-    if (isMainProcess()) { DBG cerr << "initial sparse fragment: " << endl << A; }
+    ONE_DBG cerr << "initial sparse fragment: " << endl << A;
     for (int iter = 0; iter < exponent; ++iter) {
         for (int part = 0; part < parts; ++part) {
             mulColA();
-            if (isMainProcess()) { DBG cerr << "after multiplication " << part << ": " << endl << C; }
+            ONE_DBG cerr << "after multiplication " << part << ": " << endl << C;
             // no need for rotation after last part, impossible to rotate with one process
             if (parts > 1 && part != parts-1) {
                 rotateColA();
-                if (isMainProcess()) { DBG cerr << "after rotation " << part << ": " << endl << A; }
+                ONE_DBG cerr << "after rotation " << part << ": " << endl << A;
             }
         }
         if (iter != exponent-1) {
@@ -35,6 +34,7 @@ DenseMatrix Multiplicator::matmulColumnA(int exponent, int replication) {
     }
     return C;
 }
+
 
 Multiplicator::Multiplicator(SparseMatrix &_A, DenseMatrix &_B, vector<int> &_nnzs)
         : p(Flags::procs), n(_B.height), g_rank(Flags::group_comm.Get_rank()), part_id(groupId()),
@@ -51,7 +51,8 @@ Multiplicator::Multiplicator(SparseMatrix &_A, DenseMatrix &_B, vector<int> &_nn
 
 
 void Multiplicator::mulColA() {
-    int part_offset = firstIdxForProcess(n, p, part_id * c);
+    int part_offset = partStart(true, part_id);
+    ONE_DBG cerr << "mul part_id: " << part_id << "  offset: " << part_offset << endl;
     // For each sparse submatrix element we have, add value to all C fields in its row
     for (int row = 0; row < A.height; ++row) {
         for (int i = A.ia[row]; i < A.ia[row+1]; ++i) {
@@ -66,6 +67,7 @@ void Multiplicator::mulColA() {
 
 
 void Multiplicator::rotateColA() {
+    ONE_DBG cerr << "send part_id: " << part_id << "  width: " << partSize(true, part_id) << "  recv nnzs: " << nnzs;
     int next = (g_rank == parts - 1) ? 0 : g_rank + 1;
     int prev = (g_rank == 0) ? parts - 1 : g_rank - 1;
     send_a_v.clear();
@@ -88,14 +90,11 @@ void Multiplicator::rotateColA() {
     req_ij.Wait();
     // Rotate the nnzs vector by one position to reflect the submatrix rotation
     int tmp = nnzs.back();
-    for (int i = 1; i < (int) nnzs.size(); ++i) nnzs[i] = nnzs[i-1];
-    nnzs[0] = tmp;
-    part_id = (part_id == 0) ? p - 1 : part_id - 1;
+    for (int i = nnzs.size()-1; i >= 1; --i) nnzs[i] = nnzs[i-1];
+    nnzs.front() = tmp;
+    part_id = (part_id == 0) ? parts - 1 : part_id - 1;
     // Decode the received part
-    int width = idxsForProcesses(n, p, part_id * c, (part_id + 1) * c);
-    DBG cerr << "width: " << width << "  start: " << part_id * c << "  end: " << (part_id+1) * c 
-        << "  endIdx: " << firstIdxForProcess(n, p, (part_id + 1) * c)
-        << "  startIdx: " << firstIdxForProcess(n, p, (part_id) * c)
-        << endl ;
+    int width = partSize(true, part_id);
+    ONE_DBG cerr << "recv part_id: " << part_id << "  width: " << width << "   new nnzs: " << nnzs;
     A = SparseMatrix(A.height, width, nnzs[groupId()], recv_a_v.begin(), recv_ij_v.begin());
 }

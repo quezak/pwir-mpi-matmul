@@ -1,6 +1,7 @@
 #ifndef UTILS_HPP
 #define UTILS_HPP
 
+#include <iomanip>
 #include <string>
 #include <exception>
 #include <mpi.h>
@@ -11,8 +12,13 @@ using std::string;
 #define DEBUG 0
 #endif
 
-#define DBG if (DEBUG) cerr << "[" << Flags::rank << "] "; if (DEBUG)
-#define IMHIR cerr << __FILE__ << ":" << __LINE__ << endl
+#define DBG_ID cerr << "  [" << Flags::rank << " " << std::setw(20) << std::left << __FUNCTION__ << std::right << "] "
+#define IMHERE cerr << __FILE__ << ":" << __LINE__ << endl
+#define DBG if (DEBUG) DBG_ID; if (DEBUG)
+#define ONE_WORKER if (Flags::rank == _one_worker_num)
+#define ONE_DBG if (DEBUG && Flags::rank == _one_worker_num) DBG_ID; if (DEBUG && Flags::rank == _one_worker_num)
+extern int _one_worker_num;
+
 
 class Exception: public std::exception {
 private:

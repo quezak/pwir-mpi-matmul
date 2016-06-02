@@ -7,6 +7,8 @@
 using namespace std;
 
 
+int _one_worker_num = 0;
+
 int Flags::procs = 1;
 int Flags::rank = NOT_SET;
 bool Flags::show_results = false;
@@ -28,7 +30,7 @@ bool Flags::parseArgv(int argc, char **argv) {
         return false;
     }
     int option = -1;
-    while ((option = getopt(argc, argv, "vis:f:c:e:g:")) != -1) {
+    while ((option = getopt(argc, argv, "vis:f:c:e:g:O:")) != -1) {
         switch (option) {
             case 'v': 
                 show_results = true; 
@@ -53,6 +55,9 @@ bool Flags::parseArgv(int argc, char **argv) {
             case 'g': 
                 count_ge = true; 
                 ge_element = atof(optarg);
+                break;
+            case 'O':
+                _one_worker_num = atoi(optarg);
                 break;
             default:
                 cerr << "error parsing argument " << option << endl;

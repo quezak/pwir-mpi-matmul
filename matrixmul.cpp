@@ -27,11 +27,15 @@ int main(int argc, char * argv[]) {
         // Unneded if no replication is done
         int repl_id = Flags::rank % (Flags::procs / Flags::repl);
         Flags::repl_comm = COMM_WORLD.Split(repl_id, Flags::rank);
+        ONE_DBG cerr << "repl comm rank: " << Flags::repl_comm.Get_rank() 
+            << "  size: " << Flags::repl_comm.Get_size() << endl;
     }
     // Communicator to rotate data (processes will have different parts, and together the whole A)
     // Will be just one comm if c=1
     int group_id = Flags::rank / (Flags::procs / Flags::repl);
     Flags::group_comm = COMM_WORLD.Split(group_id, Flags::rank);
+    ONE_DBG cerr << "group comm rank: " << Flags::group_comm.Get_rank() 
+        << "  size: " << Flags::group_comm.Get_size() << endl;
     
     // ------- read CSR --------
     SparseMatrix A;
@@ -47,6 +51,7 @@ int main(int argc, char * argv[]) {
     }
     Flags::size = A.height;  // the matrices are square and equal in size
     COMM_WORLD.Bcast(&Flags::size, 1, MPI::INT, MAIN_PROCESS);  // All processes need the size
+    initPartSizes();
 
     // ------ scatter data -------
     double comm_start =  MPI::Wtime();
@@ -55,15 +60,17 @@ int main(int argc, char * argv[]) {
     A = splitAndScatter(A, nnzs);
     if (DEBUG) {
         DenseMatrix densePartA(A);
-        if (isMainProcess()) { DBG cerr << "---- unsparsed unscattered A ----" << endl; }
-        gatherAndShow(densePartA);
+        //if (isMainProcess()) { DBG cerr << "---- unsparsed unscattered A ----" << endl; }
+        //gatherAndShow(densePartA);
     }
     if (Flags::repl > 1) {
+        ONE_DBG cerr << "---- part before repl ----" << endl << A;
         A = replicateA(A, nnzs);
+        ONE_DBG cerr << "---- part  after repl ----" << endl << A;
         if (DEBUG && isMainGroup()) {
             DenseMatrix densePartA(A);
-            if (isMainProcess()) { DBG cerr << "---- unsparsed unscattered replicated A ----" << endl; }
-            gatherAndShow(densePartA, Flags::procs/Flags::repl, Flags::group_comm);
+            //if (isMainProcess()) { DBG cerr << "---- unsparsed unscattered replicated A ----" << endl; }
+            //gatherAndShow(densePartA, Flags::procs/Flags::repl, Flags::group_comm);
         }
     }
     Multiplicator mult(A, B, nnzs);

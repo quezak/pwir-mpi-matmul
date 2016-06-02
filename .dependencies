@@ -5,6 +5,5 @@ matrix_utils.o: matrix_utils.cpp matrix_utils.hpp matrix.hpp utils.hpp \
  densematgen.h
 multiplicator.o: multiplicator.cpp multiplicator.hpp matrix.hpp utils.hpp \
  matrix_utils.hpp
-test.o: test.cpp matrix_utils.hpp matrix.hpp utils.hpp
 utils.o: utils.cpp utils.hpp
 densematgen.o: densematgen.c densematgen.h

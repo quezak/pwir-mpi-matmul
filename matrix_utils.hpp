@@ -11,23 +11,17 @@ using std::string;
 using std::ostream;
 using std::vector;
 
-/// Return the index of first row/column owned by rank-th process when dividing matrix of a given
-/// size into almost-equal parts. If rank > parts, it is taken modulo parts.
-int firstIdxForProcess(int size, int parts, int rank);
+
+/// Return size of i-th matrix part (in rows/cols), either before replication (p parts) or after (p/c parts)
+int partSize(bool repl, int i);
 
 
-/// Return number of elements owned by rank-th process when dividing matrix of a given
-/// size into almost-equal parts. If rank > parts, it is taken modulo parts.
-int idxsForProcess(int size, int parts, int rank);
+/// Return first index of i-th matrix part (in rows/cols), either before replication (p parts) or after (p/c parts)
+int partStart(bool repl, int i);
+int partEnd(bool repl, int i);
 
 
-/// Return number of elements owned by processes from start (inclusive) to end (exclusive)
-int idxsForProcesses(int size, int parts, int start, int end);
-
-
-/// Return maximum number of elements owned by any process. In current implementation that's the
-/// last one.
-int maxIdxsForProcess(int size, int parts);
+void initPartSizes();
 
 
 /// Read a sparse matrix from file, return true if successful
