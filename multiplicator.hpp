@@ -1,5 +1,6 @@
 #ifndef MULTIPLICATOR_HPP
 #define MULTIPLICATOR_HPP
+
 #include <vector>
 
 #include "matrix.hpp"
@@ -16,6 +17,7 @@ private:
     int g_rank = Flags::NOT_SET;  // rank inside the rotation group
     int part_id = Flags::NOT_SET;
     int parts = Flags::NOT_SET;
+    SparseMatrix send_A;  // a copy of A for sending, so it can be done in parallel with receiving
 
     void mulColA();
     void rotateColA();

@@ -1,5 +1,6 @@
 #ifndef MATRIX_UTILS_HPP
 #define MATRIX_UTILS_HPP
+
 #include <iostream>
 #include <string>
 #include <vector>
@@ -50,12 +51,12 @@ ostream& operator<< (ostream& output, const vector<T> &v) {
 /// Split a sparse matrix into parts and distribute it among processes.
 /// @param m a sparse matrix, nonempty only for scatter root
 /// @return i-th column block (as sparse submatrix) of matrix m for process i
-SparseMatrix splitAndScatter(const SparseMatrix &m, vector<int> &nnzs);
+SparseMatrix splitAndScatter(SparseMatrix &m, vector<int> &nnzs);
 
 
 /// @param m rank-th block(row|col) of matrix A divided into p parts
 /// @return the appropriate part of matrix A divided and replicated into p/c parts
-SparseMatrix replicateA(const SparseMatrix &m, vector<int> &nnzs);
+void replicateA(SparseMatrix &m, vector<int> &nnzs);
 
 
 DenseMatrix generateBFragment();

@@ -1,4 +1,5 @@
 #include "multiplicator.hpp"
+
 #include <algorithm>
 #include <mpi.h>
 
@@ -29,7 +30,7 @@ DenseMatrix Multiplicator::matmulColumnA(int exponent, int replication) {
         }
         if (iter != exponent-1) {
             B = C;
-            C = DenseMatrix(B.height, B.width);
+            C = DenseMatrix(B.height, B.width, B.row_off, B.col_off);
         }
     }
     return C;
@@ -38,7 +39,7 @@ DenseMatrix Multiplicator::matmulColumnA(int exponent, int replication) {
 
 Multiplicator::Multiplicator(SparseMatrix &_A, DenseMatrix &_B, vector<int> &_nnzs)
         : p(Flags::procs), n(_B.height), g_rank(Flags::group_comm.Get_rank()), part_id(groupId()),
-          A(_A), B(_B), C(_B.height, _B.width), nnzs(_nnzs) {
+          A(_A), B(_B), C(_B.height, _B.width, _B.row_off, _B.col_off), nnzs(_nnzs) {
     int max_nnz = *max_element(nnzs.begin(), nnzs.end());
     // Resize the communication vectors once so we don't have to worry later
     // -- they would be of this size at some point anyway
@@ -51,50 +52,36 @@ Multiplicator::Multiplicator(SparseMatrix &_A, DenseMatrix &_B, vector<int> &_nn
 
 
 void Multiplicator::mulColA() {
-    int part_offset = partStart(true, part_id);
-    ONE_DBG cerr << "mul part_id: " << part_id << "  offset: " << part_offset << endl;
-    // For each sparse submatrix element we have, add value to all C fields in its row
-    for (int row = 0; row < A.height; ++row) {
-        for (int i = A.ia[row]; i < A.ia[row+1]; ++i) {
-            // element == A.a[i]
-            // A col == B row - part_offfset == A.ja[i]
-            for (int bcol = 0; bcol < B.width; ++bcol) {
-                C[row][bcol] += A.a[i] * B[A.ja[i] + part_offset][bcol];
-            }
+    ONE_DBG cerr << "mul part_id: " << part_id << endl;
+    for (const auto &elem : A.values) {  // for each element in sparse matrix
+        for (int bcol = 0; bcol < B.width; ++bcol) {  // for each B column we have
+            // no offsets, elem.row, elem.col are absolute values in the original matrix
+            C[elem.row][bcol] += elem.val * B[elem.col][bcol];
         }
     }
 }
 
 
 void Multiplicator::rotateColA() {
-    ONE_DBG cerr << "send part_id: " << part_id << "  width: " << partSize(true, part_id) << "  recv nnzs: " << nnzs;
+    ONE_DBG cerr << "send part_id: " << part_id << "  width: " << A.width
+        << "  nnz: "  << A.nnz() << "  cur nnzs: " << nnzs;
     int next = (g_rank == parts - 1) ? 0 : g_rank + 1;
     int prev = (g_rank == 0) ? parts - 1 : g_rank - 1;
-    send_a_v.clear();
-    send_ij_v.clear();
-    A.appendToVectors(send_a_v, send_ij_v);
-    //DBG cerr << "send_a_v: " << send_a_v.size() << "  send_ij_v: " << send_ij_v.size()
-        //<< "  nnz: " << A.nnz << "  ij: " << A.nnz + A.height + 1
-        //<< "  prev nnz: " << nnzs[prev] << "  prev ij: " << nnzs[prev] + A.height + 1
-        //<< endl;
-    // Send our part of A to the next process
-    Flags::group_comm.Isend(send_a_v.data(), A.nnz, MPI::DOUBLE, next, ROTATE_SPARSE_A);
-    Flags::group_comm.Isend(send_ij_v.data(), A.nnz + A.height + 1, MPI::INT, next, ROTATE_SPARSE_IJ);
-    // TODO measure if/how much IRecv is better here
-    // Receive new part of A from prev process
-    MPI::Request req_a = Flags::group_comm.Irecv(recv_a_v.data(), nnzs[prev], MPI::DOUBLE,
-            prev, ROTATE_SPARSE_A);
-    MPI::Request req_ij = Flags::group_comm.Irecv(recv_ij_v.data(), nnzs[prev] + A.height + 1, MPI::INT,
-            prev, ROTATE_SPARSE_IJ);
-    req_a.Wait();
-    req_ij.Wait();
     // Rotate the nnzs vector by one position to reflect the submatrix rotation
-    int tmp = nnzs.back();
-    for (int i = nnzs.size()-1; i >= 1; --i) nnzs[i] = nnzs[i-1];
-    nnzs.front() = tmp;
+    //int tmp = nnzs.back();
+    //for (int i = nnzs.size()-1; i >= 1; --i) nnzs[i] = nnzs[i-1];
+    //nnzs.front() = tmp;
     part_id = (part_id == 0) ? parts - 1 : part_id - 1;
-    // Decode the received part
-    int width = partSize(true, part_id);
-    ONE_DBG cerr << "recv part_id: " << part_id << "  width: " << width << "   new nnzs: " << nnzs;
-    A = SparseMatrix(A.height, width, nnzs[groupId()], recv_a_v.begin(), recv_ij_v.begin());
+    // Prepare send & recv buffers
+    send_A = A;  // TODO check if this can use move-constructor
+    A = SparseMatrix(send_A.height, partSize(true, part_id), 0, partStart(true, part_id), nnzs[part_id]);
+    ONE_DBG cerr << "recv part_id: " << part_id << "  width: " << A.width
+        << "  nnz: " << A.nnz() << "  new nnzs: " << nnzs;
+    // Send our part of A to the next process asynchronously
+    // TODO check if we need to wait for the previous loop's Isend
+    Flags::group_comm.Isend(send_A.values.data(), send_A.nnz(), SparseMatrix::ELEM_TYPE,
+            next, ROTATE_SPARSE_BLOCK_COL);
+    // Receive next part of A from prev process
+    Flags::group_comm.Recv(A.values.data(), A.nnz(), SparseMatrix::ELEM_TYPE,
+            prev, ROTATE_SPARSE_BLOCK_COL);
 }

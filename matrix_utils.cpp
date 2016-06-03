@@ -1,4 +1,7 @@
 #include "matrix_utils.hpp"
+
+#include <algorithm>
+#include <cstddef>
 #include <fstream>
 #include <mpi.h>
 
@@ -74,7 +77,6 @@ int partEnd(bool repl, int i) {
 }
 
 
-
 bool readSparseMatrix(const string &filename, SparseMatrix &matrix) {
     ifstream input(filename);
     if (!input.is_open()) {
@@ -99,7 +101,7 @@ void gatherAndShow(DenseMatrix &m, int parts, MPI::Intracomm &comm) {
                 MAIN_PROCESS);
     } else {
         const int n = Flags::size;
-        DenseMatrix recvM(n, n);
+        DenseMatrix recvM(n, n, 0, 0);
         vector<int> counts(parts);
         for (int i = 0; i < parts; ++i)
             counts[i] = n * partSize((parts < Flags::procs), i);
@@ -119,68 +121,53 @@ void gatherAndShow(DenseMatrix &m, int parts, MPI::Intracomm &comm) {
 }
 
 
-SparseMatrix splitAndScatter(const SparseMatrix &m, vector<int> &nnzs) {
-    int partNnz = 0;
+SparseMatrix splitAndScatter(SparseMatrix &m, vector<int> &nnzs) {
     int n = Flags::size;
     int p = Flags::procs;
-    vector<double> a_v;
-    vector<int> ij_v;
+    int r = Flags::rank;
+    SparseMatrix my_part;
 
     if (!isMainProcess()) {
         nnzs.resize(p);
         COMM_WORLD.Bcast(nnzs.data(), p, MPI::INT, MAIN_PROCESS);
-        partNnz = nnzs[Flags::rank];
-        a_v.resize(partNnz);
-        ij_v.resize(partNnz + n + 1);
-        COMM_WORLD.Scatterv(NULL, NULL, NULL, MPI::DOUBLE,
-                a_v.data(), partNnz, MPI::DOUBLE,
-                MAIN_PROCESS);
-        COMM_WORLD.Scatterv(NULL, NULL, NULL, MPI::DOUBLE,
-                ij_v.data(), partNnz + n + 1, MPI::DOUBLE,
+        my_part = SparseMatrix(n, partSize(false, r), 0, partStart(false, r), nnzs[r]);
+        COMM_WORLD.Scatterv(NULL, NULL, NULL, MPI::DOUBLE, // ignored for non-root
+                my_part.values.data(), my_part.nnz(), SparseMatrix::ELEM_TYPE,
                 MAIN_PROCESS);
     } else {
-        vector<double> all_a_v;
-        vector<int> all_ij_v;
-        vector<int> a_displs, ij_counts, ij_displs;
-        nnzs.clear();  // use nnzs instead of a_counts as it will be needed by everyone
-        all_a_v.reserve(m.nnz);
-        all_ij_v.reserve(m.nnz + p * (m.height + 1));
-        nnzs.reserve(p);
-        a_displs.reserve(p);
-        ij_counts.reserve(p);
-        ij_displs.reserve(p);
-        for (int i = 0; i < p; ++i) {
-            int start = partStart(false, i);
-            int end = partEnd(false, i);
-            ONE_DBG cerr << "part: " << i << "  start: " << start << "  end: " << end << endl;
-            SparseMatrix partM = m.getColBlock(start, end);
-            partM.appendToVectors(all_a_v, nnzs, a_displs,
-                    all_ij_v, ij_counts, ij_displs);
+        nnzs.resize(p);
+        vector<int> val_displs(p);
+
+        // Sort values by columns and find starts of each block, so we can send directly from m
+        sort(m.values.begin(), m.values.end(), SparseMatrix::Elem::colOrder);
+        for (int part = 0; part < p; ++part) {
+            auto start_elem_it = lower_bound(m.values.begin(), m.values.end(),
+                    SparseMatrix::Elem(0.0, -1, partStart(false, part)),
+                    SparseMatrix::Elem::colOrder);
+            auto end_elem_it = lower_bound(m.values.begin(), m.values.end(),
+                    SparseMatrix::Elem(0.0, -1, partEnd(false, part)),
+                    SparseMatrix::Elem::colOrder);
+            nnzs[part] = end_elem_it - start_elem_it;
+            val_displs[part] = start_elem_it - m.values.begin();
         }
+        ONE_DBG cerr << "nnzs      : " << nnzs;
+        ONE_DBG cerr << "val_displs: " << val_displs;
+
+        // nnzs values will be needed by everyone
         COMM_WORLD.Bcast(nnzs.data(), p, MPI::INT, MAIN_PROCESS);
-        partNnz = nnzs[Flags::rank];
-        //DBG cerr << "all a size: " << all_a_v.size() << endl;
-        ONE_DBG cerr << "nnzs:  " << nnzs;
-        //DBG cerr << "a_displs:  " << a_displs;
-        //DBG cerr << "all ij size: " << all_ij_v.size() << endl;
-        //DBG cerr << "ij_counts:  " << ij_counts;
-        //DBG cerr << "ij_displs:  " << ij_displs;
-        a_v.resize(partNnz);
-        ij_v.resize(partNnz + n + 1);
-        COMM_WORLD.Scatterv(all_a_v.data(), nnzs.data(), a_displs.data(), MPI::DOUBLE,
-                a_v.data(), partNnz, MPI::DOUBLE,
-                MAIN_PROCESS);
-        COMM_WORLD.Scatterv(all_ij_v.data(), ij_counts.data(), ij_displs.data(), MPI::INT,
-                ij_v.data(), partNnz + n + 1, MPI::INT,
+
+        // scatter the fragments
+        my_part = SparseMatrix(n, partSize(false, r), 0, partStart(false, r), nnzs[r]);
+        COMM_WORLD.Scatterv(m.values.data(), nnzs.data(), val_displs.data(), SparseMatrix::ELEM_TYPE,
+                my_part.values.data(), my_part.nnz(), SparseMatrix::ELEM_TYPE,
                 MAIN_PROCESS);
     }
 
-    int width = partSize(false, Flags::rank);
-    return SparseMatrix(n, width, partNnz, a_v.begin(), ij_v.begin());
+    return my_part;
 }
 
 
-SparseMatrix replicateA(const SparseMatrix &m, vector<int> &nnzs) {
+void replicateA(SparseMatrix &m, vector<int> &nnzs) {
     // Matrix division before replication: p almost-equal block columns:
     //  p[0] has first, p[p/c] has 2nd, p[2p/c] the 3rd, ...
     //  p[1] has (p/c)th, p[p/c+1] has (p/c+1)th, ...
@@ -189,65 +176,38 @@ SparseMatrix replicateA(const SparseMatrix &m, vector<int> &nnzs) {
     // When returning, nnzs should be filled for each group_comm separately.
     int c = Flags::repl;  // should be equal to repl_comm.Get_size()
     int p = Flags::procs;
-    int n = Flags::size;
     int repl_rank = Flags::repl_comm.Get_rank();  // should be in [0..c)
-    vector<double> a_v;
-    vector<int> ij_v;
-    vector<int> a_displs, ij_counts, ij_displs, subnnzs;
-    // Prepare vectors: subnnzs is used for a_counts inside the one p/c part.
-    subnnzs.reserve(c);
-    a_displs.reserve(c);
-    ij_counts.reserve(c+1);
-    ij_displs.reserve(c+1);
-    int sumnnz = 0;
-    int sumijcount = 0;
-    for (int i = Flags::rank % p/c; i < p; i += p/c) {
-        subnnzs.push_back(nnzs[i]);
-        a_displs.push_back(sumnnz);
-        ij_counts.push_back(nnzs[i] + n + 1);
-        ij_displs.push_back(sumijcount);
-        sumnnz += subnnzs.back();
-        sumijcount += ij_counts.back();
+    vector<int> val_counts, val_displs;
+
+    // Prepare count and displ vectors from subpart sizes
+    val_counts.reserve(c);
+    val_displs.reserve(c+1);
+    val_displs.push_back(0);
+    for (int i = repl_rank; i < p; i += p/c) {
+        val_counts.push_back(nnzs[i]);
+        val_displs.push_back(val_displs.back() + nnzs[i]);
     }
-    a_displs.push_back(sumnnz);  // additional guards that will be helpful
-    ij_displs.push_back(sumijcount);
-    a_v.reserve(sumnnz);
-    ij_v.reserve(sumnnz + c * (m.height + 1));
-    // Put this process's subpart into the right part of the vectors (to do an in-place allgatherv
-    a_v.insert(a_v.end(), a_displs[repl_rank], 0.0);
-    ij_v.insert(ij_v.end(), ij_displs[repl_rank], 0.0);
-    m.appendToVectors(a_v, ij_v);
-    a_v.insert(a_v.end(), a_displs[c] - a_displs[repl_rank+1], 0.0);
-    ij_v.insert(ij_v.end(), ij_displs[c] - ij_displs[repl_rank+1], 0.0);
-    ONE_DBG cerr << "a_v size: " << a_v.size() << "  ij_v size: " << ij_v.size()
-        << "  sumnnz: " << sumnnz << "  sumijcount: " << sumijcount << endl;
+    ONE_DBG cerr << "val_counts: " << val_counts;
+    ONE_DBG cerr << "val_displs: " << val_displs;
+
+    // Put this process's subpart into the right part of the vectors (to do an in-place allgatherv)
+    m.col_off = partStart(true, groupId());
+    m.width = partSize(true, groupId());
+    m.values.reserve(val_displs.back());  // insert needed zero elements before current ones
+    m.values.insert(m.values.begin(), val_displs[repl_rank], SparseMatrix::Elem());
+    ONE_DBG cerr << "after prepending " << val_displs[repl_rank] << " zeroes nnz: " << m.nnz() << endl;
+    m.values.resize(val_displs.back());  // append needed zero elements at the back
+    ONE_DBG cerr << "resized m nnz: " << m.nnz() << endl;
+
     // Share the subparts
-    Flags::repl_comm.Allgatherv(MPI::IN_PLACE, 0 /*ignored*/, MPI::DOUBLE,
-            a_v.data(), subnnzs.data(), a_displs.data(), MPI::DOUBLE);
-    Flags::repl_comm.Allgatherv(MPI::IN_PLACE, 0 /*ignored*/, MPI::INT,
-            ij_v.data(), ij_counts.data(), ij_displs.data(), MPI::INT);
-    // Adjust the vector data so a single submatrix can be constructed:
-    //  sum the ia values, offset the ja values
-    vector<int> new_ij_v;
-    new_ij_v.reserve(a_v.size() + n + 1);
-    new_ij_v.resize(n+1, 0);
-    for (int part = 0; part < c; ++part) {
-        for (int i = 0; i < n+1; ++i)
-            new_ij_v[i] += ij_v[i + ij_displs[part]];
-        int offset = partStart(false, c * groupId() + part) - partStart(false, c * groupId());
-        for (int i = ij_displs[part] + n + 1; i < ij_displs[part+1]; ++i)
-            new_ij_v.push_back(ij_v[i] + offset);
-    }
-    ONE_DBG cerr << "new_ij_v size: " << new_ij_v.size() << "  a_v_size+n+1: "
-        << a_v.size() + n + 1 << endl;
+    Flags::repl_comm.Allgatherv(MPI::IN_PLACE, 0 /*ignored*/, SparseMatrix::ELEM_TYPE,
+            m.values.data(), val_counts.data(), val_displs.data(), SparseMatrix::ELEM_TYPE);
+
     // calculate new nnzs
     vector<int> new_nnzs(p/c, 0);
     for (int i = 0; i < (int) nnzs.size(); ++i)
         new_nnzs[i % (p/c)] += nnzs[i];
     nnzs = new_nnzs;
-    // Finally, return the replicated part of A
-    int width = partSize(true, groupId());
-    return SparseMatrix(n, width, nnzs[groupId()], a_v.begin(), ij_v.begin());
 }
 
 
@@ -256,9 +216,7 @@ DenseMatrix generateBFragment() {
         throw ShouldNotBeCalled("B generation for innerABC");
     } else {
         return DenseMatrix(Flags::size, partSize(false, Flags::rank),
-                generate_double, Flags::gen_seed,
-                0, partStart(false, Flags::rank));
+                0, partStart(false, Flags::rank),
+                generate_double, Flags::gen_seed);
     }
 }
-
-

@@ -1,5 +1,6 @@
 #ifndef MATRIX_HPP
 #define MATRIX_HPP
+
 #include <vector>
 #include <iostream>
 #include <functional>
@@ -20,10 +21,11 @@ class SparseMatrix;
 class Matrix {
 public:
     int height, width;
+    int row_off, col_off;  // offsets to know a submatrix position
 
-    Matrix(int h, int w): height(h), width(w) {}
-    Matrix(): Matrix(0, 0) {}
-    Matrix(const Matrix &m): height(m.height), width(m.width) {}
+    Matrix(int h, int w, int r_o, int c_o): height(h), width(w), row_off(r_o), col_off(c_o) {}
+    Matrix(): Matrix(0, 0, 0, 0) {}
+    Matrix(const Matrix &m) = default;
 
     /// Return value at given coordinates.
     virtual double& at(int row, int col) = 0;
@@ -58,6 +60,8 @@ public:
     virtual Matrix& operator= (const Matrix &m) {
         height = m.height;
         width = m.width;
+        row_off = m.row_off;
+        col_off = m.col_off;
         return *this;
     }
 
@@ -79,12 +83,12 @@ public:
     typedef function<double(int, int, int)> MatrixGenerator;
 
     /// Zero-size matrix
-    DenseMatrix(): DenseMatrix(0, 0) {}
+    DenseMatrix(): DenseMatrix(0, 0, 0, 0) {}
     /// Empty h x w matrix
-    DenseMatrix(int h, int w);
+    DenseMatrix(int h, int w, int r_o, int c_o);
     /// h x w matrix filled with a generator function.
     /// Offsets denote the coordinates of the upper-left corner when generating a submatrix.
-    DenseMatrix(int h, int w, MatrixGenerator gen, int seed, int rowOffset, int colOffset);
+    DenseMatrix(int h, int w, int r_o, int c_o, MatrixGenerator gen, int seed);
     /// Copy
     DenseMatrix(const DenseMatrix &m): Matrix(m), data(m.data) {}
     /// Convert sparse to dense for debugging purposes
@@ -120,23 +124,37 @@ public:
 
 class SparseMatrix : public Matrix {
 public:
-    /// Vector definitions available at 
-    // https://en.wikipedia.org/wiki/Sparse_matrix#Compressed_sparse_row_.28CSR.2C_CRS_or_Yale_format.29
-    vector<double> a;  // size: nnz
-    vector<int> ia, ja;  // ia size: h+1, ja size: nnz
-    int nnz;  // number of nonzero elements
+    struct Elem {
+        double val;
+        int row, col;
 
+        Elem(double v, int r, int c): val(v), row(r), col(c) {}
+        Elem(): Elem(0, 0, 0) {}
+
+        bool at(int r, int c) const {
+            return row == r && col == c;
+        }
+
+        static bool rowOrder(const Elem &a, const Elem &b) {
+            return (a.row == b.row) ? (a.col < b.col) : (a.row < b.row);
+        }
+
+        static bool colOrder(const Elem &a, const Elem &b) {
+            return (a.col == b.col) ? (a.row < b.row) : (a.col < b.col);
+        }
+
+        void print(ostream &output) const;
+    };
+    vector<Elem> values;
+
+    /// Empty h x w matrix with space reserved for nnz elements
+    SparseMatrix(int h, int w, int r_o, int c_o, int nnz): Matrix(h, w, r_o, c_o), values(nnz) {}
+    /// Empty h x w matrix without reserved space
+    SparseMatrix(int h, int w, int r_o, int c_o): SparseMatrix(h, w, r_o, c_o, 0) {}
     /// Zero-size matrix
-    SparseMatrix() : Matrix() {}
-    /// Empty h x w matrix
-    SparseMatrix(int h, int w): Matrix(h, w) {}
-    /// Initialize matrix from vectors used for scattering
-    SparseMatrix(int h, int w, int _nnz,
-            vector<double>::const_iterator a_it,
-            vector<int>::const_iterator ij_it);
+    SparseMatrix() : SparseMatrix(0, 0, 0, 0) {}
     /// Copy
-    SparseMatrix(const SparseMatrix &m):
-        Matrix(m), a(m.a), ia(m.ia), ja(m.ja), nnz(m.nnz) {}
+    SparseMatrix(const SparseMatrix &m): Matrix(m), values(m.values) {}
 
     virtual double& at(int row, int col) override {
         throw ShouldNotBeCalled("at in SparseMatrix");
@@ -148,29 +166,30 @@ public:
 
     virtual double get(int row, int col) const override;
 
+    int nnz() const { return values.size(); }
+
     /// Return matrix slice containing rows [start, end)
     SparseMatrix getRowBlock(int start, int end) const;
 
     /// Return matrix slice containing columns [start, end)
     SparseMatrix getColBlock(int start, int end) const;
 
-    /// Output a submatrix to vectors that can be used for scattering
-    void appendToVectors(vector<double> &a_v, vector<int> &a_count_v, vector<int> &a_pos_v,
-            vector<int> &ij_v, vector<int> &ij_count_v, vector<int> &ij_pos_v) const;
-
-    /// Output a submatrix to vectors for communicting a single submatrix
-    void appendToVectors(vector<double> &a_v, vector<int> &ij_v) const;
-
     SparseMatrix& operator= (const SparseMatrix &m) {
         Matrix::operator=(m);
-        nnz = m.nnz;
-        a = m.a;
-        ia = m.ia;
-        ja = m.ja;
+        values = m.values;
         return *this;
     }
 
     void print(ostream& output) const override;
+
+    static MPI::Datatype ELEM_TYPE;
+    // initializes the MPI datatype for sparse matrix elements, should be called by all processes
+    static void initElemType();
+
+
+protected:
+    typedef function<bool(Elem)> ElemPredicate;
+    SparseMatrix getBlockByFunction(int h, int w, int r_o, int c_o, ElemPredicate pred) const;
 };
 
 istream& operator>> (istream& input, SparseMatrix& m);

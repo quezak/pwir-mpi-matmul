@@ -70,8 +70,7 @@ extern const int MAIN_PROCESS;
 
 
 enum MSG_TAGS {
-    ROTATE_SPARSE_A,
-    ROTATE_SPARSE_IJ
+    ROTATE_SPARSE_BLOCK_COL
 };
 
 // id of the replication group in which the process is

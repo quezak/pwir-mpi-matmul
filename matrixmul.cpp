@@ -17,6 +17,7 @@ int main(int argc, char * argv[]) {
     MPI::Init(argc, argv);
     Flags::procs = COMM_WORLD.Get_size();
     Flags::rank = COMM_WORLD.Get_rank();
+    SparseMatrix::initElemType();
     if (!Flags::parseArgv(argc, argv)) {
         cerr << "exiting" << endl;
         MPI::Finalize();
@@ -46,7 +47,7 @@ int main(int argc, char * argv[]) {
     }
     if (DEBUG && isMainProcess()) {
         DenseMatrix denseA(A);
-        DBG cerr << "---- unsparsed A ----" << endl;
+        ONE_DBG cerr << "---- unsparsed A ----" << endl;
         cerr << denseA;
     }
     Flags::size = A.height;  // the matrices are square and equal in size
@@ -60,17 +61,17 @@ int main(int argc, char * argv[]) {
     A = splitAndScatter(A, nnzs);
     if (DEBUG) {
         DenseMatrix densePartA(A);
-        //if (isMainProcess()) { DBG cerr << "---- unsparsed unscattered A ----" << endl; }
-        //gatherAndShow(densePartA);
+        ONE_DBG cerr << "---- unsparsed unscattered A ----" << endl;
+        gatherAndShow(densePartA);
     }
     if (Flags::repl > 1) {
         ONE_DBG cerr << "---- part before repl ----" << endl << A;
-        A = replicateA(A, nnzs);
+        replicateA(A, nnzs);
         ONE_DBG cerr << "---- part  after repl ----" << endl << A;
         if (DEBUG && isMainGroup()) {
             DenseMatrix densePartA(A);
-            //if (isMainProcess()) { DBG cerr << "---- unsparsed unscattered replicated A ----" << endl; }
-            //gatherAndShow(densePartA, Flags::procs/Flags::repl, Flags::group_comm);
+            ONE_DBG cerr << "---- unsparsed unscattered replicated A ----" << endl; }
+            gatherAndShow(densePartA, Flags::procs/Flags::repl, Flags::group_comm);
         }
     }
     Multiplicator mult(A, B, nnzs);

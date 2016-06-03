@@ -92,5 +92,3 @@ int groupId() {
 bool isMainGroup() {
     return groupId() == MAIN_PROCESS / Flags::repl;
 }
-
-
