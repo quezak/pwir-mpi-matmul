@@ -32,7 +32,6 @@ bool readSparseMatrix(const string &filename, SparseMatrix &m);
 /// Gather and show a dense matrix. Assumes it's divided equally between processes.
 /// @param m dense matrix column block.
 void gatherAndShow(DenseMatrix &m);
-void gatherAndShow(DenseMatrix &m, int parts, MPI::Intracomm &comm);
 
 
 template<class T>

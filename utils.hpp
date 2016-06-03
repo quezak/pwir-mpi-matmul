@@ -15,9 +15,9 @@ using std::string;
 #define DBG_ID cerr << "  [" << Flags::rank << " " << std::setw(20) << std::left << __FUNCTION__ << std::right << "] "
 #define IMHERE cerr << __FILE__ << ":" << __LINE__ << endl
 #define DBG if (DEBUG) DBG_ID; if (DEBUG)
-#define ONE_WORKER if (Flags::rank == _one_worker_num)
-#define ONE_DBG if (DEBUG && Flags::rank == _one_worker_num) DBG_ID; if (DEBUG && Flags::rank == _one_worker_num)
-extern int _one_worker_num;
+#define ONE_WORKER if (Flags::rank == ONE_WORKER_RANK)
+#define ONE_DBG if (DEBUG && Flags::rank == ONE_WORKER_RANK) DBG_ID; if (DEBUG && Flags::rank == ONE_WORKER_RANK)
+extern int ONE_WORKER_RANK;
 
 
 class Exception: public std::exception {
@@ -73,10 +73,13 @@ enum MSG_TAGS {
     ROTATE_SPARSE_BLOCK_COL
 };
 
-// id of the replication group in which the process is
+// id of the "rotation group" in which the process is (which group_comm does it use)
 int groupId();
+int groupId(int pid);
 
-bool isMainGroup();
+// id of the "replication group" in which the process is (which repl_comm does it use)
+int replId();
+int replId(int pid);
 
 
 #endif  // UTILS_HPP

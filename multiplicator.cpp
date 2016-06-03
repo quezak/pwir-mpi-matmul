@@ -17,6 +17,7 @@ DenseMatrix Multiplicator::matmulInnerABC(int exponent, int replication) {
 DenseMatrix Multiplicator::matmulColumnA(int exponent, int replication) {
     c = replication;
     parts = p/c;
+    ONE_DBG cerr << "  gsize: " << Flags::group_comm.Get_size() << "  parts: " << parts << endl;
     ONE_DBG cerr << "initial sparse fragment: " << endl << A;
     for (int iter = 0; iter < exponent; ++iter) {
         for (int part = 0; part < parts; ++part) {
@@ -67,6 +68,8 @@ void Multiplicator::rotateColA() {
         << "  nnz: "  << A.nnz() << "  cur nnzs: " << nnzs;
     int next = (g_rank == parts - 1) ? 0 : g_rank + 1;
     int prev = (g_rank == 0) ? parts - 1 : g_rank - 1;
+    ONE_DBG cerr << "grank: " << g_rank << "  next: " << next << "  prev: " << prev
+        << "  gsize: " << Flags::group_comm.Get_size() << "  parts: " << parts << endl;
     // Rotate the nnzs vector by one position to reflect the submatrix rotation
     //int tmp = nnzs.back();
     //for (int i = nnzs.size()-1; i >= 1; --i) nnzs[i] = nnzs[i-1];

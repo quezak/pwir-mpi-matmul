@@ -61,7 +61,8 @@ void Matrix::print(ostream &output) const {
 }
 
 void SparseMatrix::print(ostream &output) const {
-    DBG output << "sparse " << height << "x" << width << ", nnz=" << nnz() << endl;
+    DBG output << "sparse " << height << "x" << width << ", nnz=" << nnz() 
+        << ", row_off: " << row_off << ", col_off: " << col_off << endl;
     Matrix::print(output);
 }
 
@@ -83,7 +84,7 @@ void SparseMatrix::Elem::print(ostream &output) const {
 double SparseMatrix::get(int row, int col) const {
     // TODO check if we need this to be faster than linear (can be log(size) if we sort the elems)
     for (const Elem &elem : values)
-        if (elem.at(row - row_off, col - col_off)) return elem.val;
+        if (elem.at(row + row_off, col + col_off)) return elem.val;
     return 0.0;
 }
 

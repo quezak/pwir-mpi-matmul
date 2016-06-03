@@ -7,7 +7,7 @@
 using namespace std;
 
 
-int _one_worker_num = 0;
+int ONE_WORKER_RANK = 0;
 
 int Flags::procs = 1;
 int Flags::rank = NOT_SET;
@@ -57,7 +57,7 @@ bool Flags::parseArgv(int argc, char **argv) {
                 ge_element = atof(optarg);
                 break;
             case 'O':
-                _one_worker_num = atoi(optarg);
+                ONE_WORKER_RANK = atoi(optarg);
                 break;
             default:
                 cerr << "error parsing argument " << option << endl;
@@ -84,11 +84,9 @@ bool isMainProcess() {
 const int MAIN_PROCESS = 0;
 
 
-int groupId() {
-    return Flags::rank / Flags::repl;
-}
+int groupId(int pid) { return pid % (Flags::procs / Flags::repl); }
+int groupId() { return groupId(Flags::rank); }
 
 
-bool isMainGroup() {
-    return groupId() == MAIN_PROCESS / Flags::repl;
-}
+int replId(int pid) { return pid / Flags::repl; }
+int replId() { return replId(Flags::rank); }

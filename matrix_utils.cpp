@@ -89,32 +89,22 @@ bool readSparseMatrix(const string &filename, SparseMatrix &matrix) {
 
 
 void gatherAndShow(DenseMatrix &m) {
-    return gatherAndShow(m, Flags::procs, COMM_WORLD); 
-}
-
-
-void gatherAndShow(DenseMatrix &m, int parts, MPI::Intracomm &comm) {
+    const int n = Flags::size;
     // we need to use Gatherv, because the counts can differ if size is not divisible by p
-    if (!isMainProcess()) {
-        comm.Gatherv(m.rawData(), m.elems(), MPI::DOUBLE,
+    if (Flags::rank != ONE_WORKER_RANK) {
+        COMM_WORLD.Gatherv(m.rawData(), n * partSize(false, Flags::rank), MPI::DOUBLE,
                 NULL, NULL, NULL, MPI::DOUBLE,  // recv params are irrelevant for other processes
-                MAIN_PROCESS);
+                ONE_WORKER_RANK);
     } else {
-        const int n = Flags::size;
+        const int p = Flags::procs;
         DenseMatrix recvM(n, n, 0, 0);
-        vector<int> counts(parts);
-        for (int i = 0; i < parts; ++i)
-            counts[i] = n * partSize((parts < Flags::procs), i);
-        vector<int> displs(parts);
-        displs[0] = 0;
-        for (int i = 1; i < parts; ++i)
-            displs[i] = displs[i-1] + counts[i-1];
-        DBG cerr << "elems: " << m.elems() << "  parts: " << parts << "  comm size: " << comm.Get_size() 
-            << "  counts: " << counts << "  displs: " << displs;
-        copy(m.data.begin(), m.data.end(), recvM.data.begin());
-        comm.Gatherv(MPI::IN_PLACE, 0 /*ignored*/, MPI::DOUBLE,
+        vector<int> counts(p);
+        for (int i = 0; i < p; ++i) counts[i] = n * partSize(false, i);
+        vector<int> displs(Flags::procs);
+        for (int i = 1; i < p; ++i) displs[i] = n * partStart(false, i);
+        COMM_WORLD.Gatherv(m.rawData(), n * partSize(false, Flags::rank), MPI::DOUBLE,
                 recvM.rawData(), counts.data(), displs.data(), MPI::DOUBLE,
-                MAIN_PROCESS);
+                ONE_WORKER_RANK);
         // TODO change stream
         cerr << recvM;
     }
@@ -176,14 +166,14 @@ void replicateA(SparseMatrix &m, vector<int> &nnzs) {
     // When returning, nnzs should be filled for each group_comm separately.
     int c = Flags::repl;  // should be equal to repl_comm.Get_size()
     int p = Flags::procs;
-    int repl_rank = Flags::repl_comm.Get_rank();  // should be in [0..c)
+    int repl_rank = Flags::repl_comm.Get_rank();
     vector<int> val_counts, val_displs;
 
     // Prepare count and displ vectors from subpart sizes
     val_counts.reserve(c);
     val_displs.reserve(c+1);
     val_displs.push_back(0);
-    for (int i = repl_rank; i < p; i += p/c) {
+    for (int i = Flags::rank % (p/c); i < p; i += p/c) {
         val_counts.push_back(nnzs[i]);
         val_displs.push_back(val_displs.back() + nnzs[i]);
     }
@@ -193,9 +183,10 @@ void replicateA(SparseMatrix &m, vector<int> &nnzs) {
     // Put this process's subpart into the right part of the vectors (to do an in-place allgatherv)
     m.col_off = partStart(true, groupId());
     m.width = partSize(true, groupId());
+    ONE_DBG cerr << "groupId: " << groupId() << "  new col_off: " << m.col_off << "  new width: " << m.width << endl;
     m.values.reserve(val_displs.back());  // insert needed zero elements before current ones
     m.values.insert(m.values.begin(), val_displs[repl_rank], SparseMatrix::Elem());
-    ONE_DBG cerr << "after prepending " << val_displs[repl_rank] << " zeroes nnz: " << m.nnz() << endl;
+    ONE_DBG cerr << "after prepending " << val_displs[groupId()] << " zeroes nnz: " << m.nnz() << endl;
     m.values.resize(val_displs.back());  // append needed zero elements at the back
     ONE_DBG cerr << "resized m nnz: " << m.nnz() << endl;
 

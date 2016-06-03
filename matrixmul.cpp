@@ -37,7 +37,7 @@ int main(int argc, char * argv[]) {
     Flags::group_comm = COMM_WORLD.Split(group_id, Flags::rank);
     ONE_DBG cerr << "group comm rank: " << Flags::group_comm.Get_rank() 
         << "  size: " << Flags::group_comm.Get_size() << endl;
-    
+
     // ------- read CSR --------
     SparseMatrix A;
     if (isMainProcess() && !readSparseMatrix(Flags::sparse_filename, A)) {
@@ -47,8 +47,7 @@ int main(int argc, char * argv[]) {
     }
     if (DEBUG && isMainProcess()) {
         DenseMatrix denseA(A);
-        ONE_DBG cerr << "---- unsparsed A ----" << endl;
-        cerr << denseA;
+        ONE_DBG cerr << "---- unsparsed A ----" << endl << denseA;
     }
     Flags::size = A.height;  // the matrices are square and equal in size
     COMM_WORLD.Bcast(&Flags::size, 1, MPI::INT, MAIN_PROCESS);  // All processes need the size
@@ -68,18 +67,13 @@ int main(int argc, char * argv[]) {
         ONE_DBG cerr << "---- part before repl ----" << endl << A;
         replicateA(A, nnzs);
         ONE_DBG cerr << "---- part  after repl ----" << endl << A;
-        if (DEBUG && isMainGroup()) {
-            DenseMatrix densePartA(A);
-            ONE_DBG cerr << "---- unsparsed unscattered replicated A ----" << endl; }
-            gatherAndShow(densePartA, Flags::procs/Flags::repl, Flags::group_comm);
-        }
     }
     Multiplicator mult(A, B, nnzs);
     COMM_WORLD.Barrier();
     double comm_end = MPI::Wtime();
     if (isMainProcess())
         cerr << "Initial communication time: " << fixed << (comm_end -  comm_start) << "s" << endl;
-    
+
 
     // ------- compute C -------
     double comp_start = MPI::Wtime();
@@ -96,10 +90,10 @@ int main(int argc, char * argv[]) {
 
     if (Flags::show_results) {
         if (DEBUG) {
-            if (isMainProcess()) { DBG cerr << "---- B ----" << endl; }
+            ONE_DBG cerr << "---- B ----" << endl;
             gatherAndShow(B);
         }
-        if (isMainProcess()) { DBG cerr << "---- C ----" << endl; }
+        ONE_DBG cerr << "---- C ----" << endl;
         // TODO if use_inner
         gatherAndShow(C);
     }
