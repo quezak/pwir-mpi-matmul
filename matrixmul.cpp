@@ -1,6 +1,7 @@
 #include <mpi.h>
 #include <cassert>
 #include <iostream>
+#include <iomanip>
 
 #include "matrix.hpp"
 #include "matrix_utils.hpp"
@@ -98,7 +99,11 @@ int main(int argc, char * argv[]) {
         gatherAndShow(C);
     }
     if (Flags::count_ge) {
-        // FIXME: replace the following line: count ge elements
+        int ge_elems = reduceGeElems(C, Flags::ge_element);
+        ONE_DBG cerr << "---- elems >= " << fixed << setprecision(5) << Flags::ge_element
+            << " ----" << endl;
+        // TODO change stream
+        ONE_WORKER cerr << ge_elems << endl;
     }
 
     MPI::Finalize();

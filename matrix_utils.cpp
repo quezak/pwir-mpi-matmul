@@ -211,3 +211,12 @@ DenseMatrix generateBFragment() {
                 generate_double, Flags::gen_seed);
     }
 }
+
+
+int reduceGeElems(const DenseMatrix &m_part, double bound) {
+    int part_count = m_part.countGeElems(bound);
+    int count = 0;
+    ONE_DBG cerr << "part count: " << part_count << endl;
+    COMM_WORLD.Reduce(&part_count, &count, 1, MPI::INT, MPI::SUM, ONE_WORKER_RANK);
+    return count;
+}

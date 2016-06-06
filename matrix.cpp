@@ -21,11 +21,18 @@ DenseMatrix::DenseMatrix(int h, int w, int r_o, int c_o, MatrixGenerator gen, in
             at(i, j) = gen(seed, i + row_off, j + col_off);
 }
 
+
 DenseMatrix::DenseMatrix(const SparseMatrix &m)
         : DenseMatrix(m.height, m.width, m.row_off, m.col_off) {
     for (const auto &elem : m.values)
         at(elem.row - row_off, elem.col - col_off) = elem.val;
 }
+
+
+int DenseMatrix::countGeElems(double bound) const {
+    return count_if(data.begin(), data.end(), [=](double val) { return val >= bound; });
+}
+
 
 // ----------------------------------------------------------------------------------------------
 
@@ -124,4 +131,3 @@ void SparseMatrix::initElemType() {
             block_lengths, field_displs, field_types);
     ELEM_TYPE.Commit();
 }
-

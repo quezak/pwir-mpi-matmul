@@ -71,7 +71,6 @@ public:
 
 
 class DenseMatrix : public Matrix {
-protected:
     /// Data is stored in one vector as a sequence of columns, to make sending data easier.
     vector<double> data;
 
@@ -118,6 +117,8 @@ public:
 
     int elems() { return data.size(); }
 
+    int countGeElems(double bound) const;
+    
     friend void gatherAndShow(DenseMatrix &m, int parts, MPI::Intracomm &comm);
 };
 

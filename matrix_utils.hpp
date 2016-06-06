@@ -61,4 +61,7 @@ void replicateA(SparseMatrix &m, vector<int> &nnzs);
 DenseMatrix generateBFragment();
 
 
+int reduceGeElems(const DenseMatrix &m_part, double bound);
+
+
 #endif  // MATRIX_UTILS_HPP
