@@ -12,6 +12,13 @@ using MPI::COMM_WORLD;
 using namespace std;
 
 
+int mpi_return(int code, const string &msg = "") {
+    if (msg != "") ONE_WORKER cerr << msg << endl;
+    MPI::Finalize();
+    return code;
+}
+
+
 int main(int argc, char * argv[]) {
 
     // ------- init args and mpi -----
@@ -19,11 +26,8 @@ int main(int argc, char * argv[]) {
     Flags::procs = COMM_WORLD.Get_size();
     Flags::rank = COMM_WORLD.Get_rank();
     SparseMatrix::initElemType();
-    if (!Flags::parseArgv(argc, argv)) {
-        cerr << "exiting" << endl;
-        MPI::Finalize();
-        return 3;
-    }
+    if (!Flags::parseArgv(argc, argv))
+        return mpi_return(3, "exiting");
     if (Flags::repl > 1) {
         // Communicator to replicate data (processes will have the same part of A)
         // Unneded if no replication is done
@@ -41,11 +45,8 @@ int main(int argc, char * argv[]) {
 
     // ------- read CSR --------
     SparseMatrix A;
-    if (isMainProcess() && !readSparseMatrix(Flags::sparse_filename, A)) {
-        cerr << "failed to read sparse matrix, exiting" << endl;
-        MPI::Finalize();
-        return 4;
-    }
+    if (isMainProcess() && !readSparseMatrix(Flags::sparse_filename, A))
+        return mpi_return(4, "failed to read sparse matrix, exiting");
     if (DEBUG && isMainProcess()) {
         DenseMatrix denseA(A);
         ONE_DBG cerr << "---- unsparsed A ----" << endl << denseA;
@@ -53,6 +54,8 @@ int main(int argc, char * argv[]) {
     Flags::size = A.height;  // the matrices are square and equal in size
     COMM_WORLD.Bcast(&Flags::size, 1, MPI::INT, MAIN_PROCESS);  // All processes need the size
     initPartSizes();
+
+    return mpi_return(0, "---- STOP ----");
 
     // ------ scatter data -------
     double comm_start =  MPI::Wtime();
@@ -74,7 +77,6 @@ int main(int argc, char * argv[]) {
     double comm_end = MPI::Wtime();
     if (isMainProcess())
         cerr << "Initial communication time: " << fixed << (comm_end -  comm_start) << "s" << endl;
-
 
     // ------- compute C -------
     double comp_start = MPI::Wtime();
@@ -106,6 +108,5 @@ int main(int argc, char * argv[]) {
         ONE_WORKER cerr << ge_elems << endl;
     }
 
-    MPI::Finalize();
-    return 0;
+    return mpi_return(0);
 }

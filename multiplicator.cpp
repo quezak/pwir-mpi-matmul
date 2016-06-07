@@ -77,7 +77,8 @@ void Multiplicator::rotateColA() {
     part_id = (part_id == 0) ? parts - 1 : part_id - 1;
     // Prepare send & recv buffers
     send_A = A;  // TODO check if this can use move-constructor
-    A = SparseMatrix(send_A.height, partSize(true, part_id), 0, partStart(true, part_id), nnzs[part_id]);
+    A = SparseMatrix(send_A.height, colAPartSize(true, part_id),
+            0, colAPartStart(true, part_id), nnzs[part_id]);
     ONE_DBG cerr << "recv part_id: " << part_id << "  width: " << A.width
         << "  nnz: " << A.nnz() << "  new nnzs: " << nnzs;
     // Send our part of A to the next process asynchronously

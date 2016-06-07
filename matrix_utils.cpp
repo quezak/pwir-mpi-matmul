@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <fstream>
+#include <numeric>
 #include <mpi.h>
 
 #include "densematgen.h"
@@ -14,67 +15,159 @@ using MPI::COMM_WORLD;
 
 
 // sizes and offsets of matrix blocks that will be given initially (with c=1), indexed by rank
-static vector<int> small_part_sizes, small_part_displs;
+static vector<int> colA_small_counts, colA_small_displs,
+    iA_small_counts, iA_small_displs,
+    iB_small_counts, iB_small_displs;
 // sizes and offsets of matrix blocks after replication, indexed by rank inside "rotation group"
-static vector<int> repl_part_sizes, repl_part_displs;
+static vector<int> colA_repl_counts, colA_repl_displs,
+    iA_repl_counts, iA_repl_displs,
+    iB_repl_counts, iB_repl_displs;
 
 
-static int idxsForProcess(int size, int parts, int rank) {
+static int idxsForPart(int size, int parts, int rank) {
     int numSmaller = parts - (size % parts);  // number of parts that are smaller by one element
     return (size / parts) + (rank >= numSmaller ? 1 : 0);
 }
 
 
+static void initPartSizesColA();
+static void initPartSizesInnerA();
+static void initPartSizesInnerB();
 void initPartSizes() {
-    if (!small_part_sizes.empty()) return;
+    if (Flags::use_inner) {
+        if (!iB_small_counts.empty()) return;
+        initPartSizesInnerA();
+        initPartSizesInnerB();
+    } else {
+        if (!colA_small_counts.empty()) return;
+        initPartSizesColA();
+    }
+}
+
+
+static void initPartSizesColA() {
     int p = Flags::procs;
     int c = Flags::repl;
     int n = Flags::size;
     ONE_DBG cerr << "p=" << p << "  c=" << c << "  n=" << n << endl;
     for (int i = 0; i < p; ++i)
-        small_part_sizes.push_back(idxsForProcess(n, p, i));
+        colA_small_counts.push_back(idxsForPart(n, p, i));
     int sum = 0;
-    small_part_displs.resize(p, 0);
+    colA_small_displs.resize(p, 0);
     // Reorder the parts a bit -- it doesn't change the result (each process multiplies by
     // all block columns), but will make easier to replicate later
     for (int imod = 0; imod < p/c; ++imod) {
         for (int i = imod; i < p; i += p/c) {
-            small_part_displs[i] = sum;
-            sum += small_part_sizes[i];
+            colA_small_displs[i] = sum;
+            sum += colA_small_counts[i];
         }
     }
-    small_part_displs.push_back(sum);
-    ONE_DBG cerr << " small_part_sizes: " << small_part_sizes;
-    ONE_DBG cerr << "small_part_displs: " << small_part_displs;
+    colA_small_displs.push_back(sum);
+    ONE_DBG cerr << "colA_small_counts: " << colA_small_counts;
+    ONE_DBG cerr << "colA_small_displs: " << colA_small_displs;
     if (c == 1) {
-        repl_part_sizes = small_part_sizes;
-        repl_part_displs = small_part_displs;
+        colA_repl_counts = colA_small_counts;
+        colA_repl_displs = colA_small_displs;
     } else {
-        repl_part_displs = vector<int>(small_part_displs.begin(), small_part_displs.begin() + p/c);
-        repl_part_displs.push_back(sum);
+        colA_repl_displs = vector<int>(colA_small_displs.begin(), colA_small_displs.begin() + p/c);
+        colA_repl_displs.push_back(sum);
         for (int i = 0; i < p/c; ++i)
-            repl_part_sizes.push_back(repl_part_displs[i+1] - repl_part_displs[i]);
-        ONE_DBG cerr << "  repl_part_sizes: " <<  repl_part_sizes;
-        ONE_DBG cerr << " repl_part_displs: " <<  repl_part_displs;
+            colA_repl_counts.push_back(colA_repl_displs[i+1] - colA_repl_displs[i]);
+        ONE_DBG cerr << " colA_repl_counts: " <<  colA_repl_counts;
+        ONE_DBG cerr << " colA_repl_displs: " <<  colA_repl_displs;
     }
 }
 
 
-int partSize(bool repl, int i) {
-    if (!repl) return small_part_sizes[i];
-    return repl_part_sizes[i];
+static void initPartSizesInnerA() {
+    int p = Flags::procs;
+    int c = Flags::repl;
+    int n = Flags::size;
+    vector<int> part_order(p);
+    for (int i = 0; i < p; ++i) part_order[i] = i;
+    sort(part_order.begin(), part_order.end(), [](int a, int b) {
+            // assign the parts first by repl group, then rank
+            return (innerAWhichReplGroup(a) == innerAWhichReplGroup(b)
+                    ? a < b
+                    : innerAWhichReplGroup(a) < innerAWhichReplGroup(b));
+            });
+    // assign sizes in part_order, to get more evenly distributed sizes after replication
+    for (int i = 0; i < p; ++i)
+        iA_small_counts.push_back(idxsForPart(n, p, part_order[i]));
+    int sum = 0;
+    iA_small_displs.resize(p+1);
+    for (int i = 0; i < p; ++i) {
+        iA_small_displs[part_order[i]] = sum;
+        sum += iA_small_counts[part_order[i]];
+    }
+    iA_small_displs[p] = sum;
+    ONE_DBG cerr << "     part_order: " << part_order;
+    ONE_DBG cerr << "iA_small_counts: " << iA_small_counts;
+    ONE_DBG cerr << "iA_small_displs: " << iA_small_displs;
+    if (c == 1) {
+        iA_repl_counts = iA_small_counts;
+        iA_repl_displs = iA_small_displs;
+    } else {
+        for (int i = 0; i < p/c; ++i) {
+            iA_repl_counts.push_back(accumulate(iA_small_counts.begin() + (i*c),
+                        iA_small_counts.begin() + ((i+1)*c), 0));
+        }
+        iA_repl_displs.resize(p/c+1, 0);
+        partial_sum(iA_repl_counts.begin(), iA_repl_counts.end(), iA_repl_displs.begin()+1);
+        ONE_DBG cerr << " iA_repl_counts: " << iA_repl_counts;
+        ONE_DBG cerr << " iA_repl_displs: " << iA_repl_displs;
+    }
 }
 
 
-int partStart(bool repl, int i) {
-    if (!repl) return small_part_displs[i];
-    return repl_part_displs[i];
+static void initPartSizesInnerB() {
+    int p = Flags::procs;
+    int c = Flags::repl;
+    int n = Flags::size;
+    // assign the sizes out-of-order, to get more evenly distributed sizes after replication
+    for (int imod = 0; imod < p/c; ++imod)
+        for (int i = imod; i < p; i += p/c)
+            iB_small_counts.push_back(idxsForPart(n, p, i));
+    iB_small_displs.resize(p+1, 0);
+    partial_sum(iB_small_counts.begin(), iB_small_counts.end(), iB_small_displs.begin()+1);
+    ONE_DBG cerr << "iB_small_counts: " << iB_small_counts;
+    ONE_DBG cerr << "iB_small_displs: " << iB_small_displs;
+    if (c == 1) {
+        iB_repl_counts = iB_small_counts;
+        iB_repl_displs = iB_small_displs;
+    } else {
+        for (int i = 0; i < p/c; ++i) {
+            iB_repl_counts.push_back(accumulate(iB_small_counts.begin() + (i*c),
+                        iB_small_counts.begin() + ((i+1)*c), 0));
+        }
+        iB_repl_displs.resize(p/c+1, 0);
+        partial_sum(iB_repl_counts.begin(), iB_repl_counts.end(), iB_repl_displs.begin()+1);
+        ONE_DBG cerr << " iB_repl_counts: " << iB_repl_counts;
+        ONE_DBG cerr << " iB_repl_displs: " << iB_repl_displs;
+    }
 }
 
 
-int partEnd(bool repl, int i) {
-    return partStart(repl, i) + partSize(repl, i);
+int innerAWhichReplGroup(int i) {
+    int p = Flags::procs;
+    int c = Flags::repl;
+    return ((i / c) + ((i % c) * (p/(c*c)))) % (p/c);
 }
+
+
+int colAPartSize(bool repl, int i) { return repl ? colA_repl_counts[i] : colA_small_counts[i]; }
+int colAPartStart(bool repl, int i) { return repl ? colA_repl_displs[i] : colA_small_displs[i]; }
+int colAPartEnd(bool repl, int i) { return colAPartStart(repl, i) + colAPartSize(repl, i); }
+
+
+int innerAPartSize(bool repl, int i) { return repl ? iA_repl_counts[i] : iA_small_counts[i]; }
+int innerAPartStart(bool repl, int i) { return repl ? iA_repl_displs[i] : iA_small_displs[i]; }
+int innerAPartEnd(bool repl, int i) { return innerAPartStart(repl, i) + innerAPartSize(repl, i); }
+
+
+int innerBPartSize(bool repl, int i) { return repl ? iB_repl_counts[i] : iB_small_counts[i]; }
+int innerBPartStart(bool repl, int i) { return repl ? iB_repl_displs[i] : iB_small_displs[i]; }
+int innerBPartEnd(bool repl, int i) { return innerBPartStart(repl, i) + innerBPartSize(repl, i); }
 
 
 bool readSparseMatrix(const string &filename, SparseMatrix &matrix) {
@@ -92,17 +185,17 @@ void gatherAndShow(DenseMatrix &m) {
     const int n = Flags::size;
     // we need to use Gatherv, because the counts can differ if size is not divisible by p
     if (Flags::rank != ONE_WORKER_RANK) {
-        COMM_WORLD.Gatherv(m.rawData(), n * partSize(false, Flags::rank), MPI::DOUBLE,
+        COMM_WORLD.Gatherv(m.rawData(), n * colAPartSize(false, Flags::rank), MPI::DOUBLE,
                 NULL, NULL, NULL, MPI::DOUBLE,  // recv params are irrelevant for other processes
                 ONE_WORKER_RANK);
     } else {
         const int p = Flags::procs;
         DenseMatrix recvM(n, n, 0, 0);
         vector<int> counts(p);
-        for (int i = 0; i < p; ++i) counts[i] = n * partSize(false, i);
+        for (int i = 0; i < p; ++i) counts[i] = n * colAPartSize(false, i);
         vector<int> displs(Flags::procs);
-        for (int i = 1; i < p; ++i) displs[i] = n * partStart(false, i);
-        COMM_WORLD.Gatherv(m.rawData(), n * partSize(false, Flags::rank), MPI::DOUBLE,
+        for (int i = 1; i < p; ++i) displs[i] = n * colAPartStart(false, i);
+        COMM_WORLD.Gatherv(m.rawData(), n * colAPartSize(false, Flags::rank), MPI::DOUBLE,
                 recvM.rawData(), counts.data(), displs.data(), MPI::DOUBLE,
                 ONE_WORKER_RANK);
         // TODO change stream
@@ -120,7 +213,7 @@ SparseMatrix splitAndScatter(SparseMatrix &m, vector<int> &nnzs) {
     if (!isMainProcess()) {
         nnzs.resize(p);
         COMM_WORLD.Bcast(nnzs.data(), p, MPI::INT, MAIN_PROCESS);
-        my_part = SparseMatrix(n, partSize(false, r), 0, partStart(false, r), nnzs[r]);
+        my_part = SparseMatrix(n, colAPartSize(false, r), 0, colAPartStart(false, r), nnzs[r]);
         COMM_WORLD.Scatterv(NULL, NULL, NULL, MPI::DOUBLE, // ignored for non-root
                 my_part.values.data(), my_part.nnz(), SparseMatrix::ELEM_TYPE,
                 MAIN_PROCESS);
@@ -132,10 +225,10 @@ SparseMatrix splitAndScatter(SparseMatrix &m, vector<int> &nnzs) {
         sort(m.values.begin(), m.values.end(), SparseMatrix::Elem::colOrder);
         for (int part = 0; part < p; ++part) {
             auto start_elem_it = lower_bound(m.values.begin(), m.values.end(),
-                    SparseMatrix::Elem(0.0, -1, partStart(false, part)),
+                    SparseMatrix::Elem(0.0, -1, colAPartStart(false, part)),
                     SparseMatrix::Elem::colOrder);
             auto end_elem_it = lower_bound(m.values.begin(), m.values.end(),
-                    SparseMatrix::Elem(0.0, -1, partEnd(false, part)),
+                    SparseMatrix::Elem(0.0, -1, colAPartEnd(false, part)),
                     SparseMatrix::Elem::colOrder);
             nnzs[part] = end_elem_it - start_elem_it;
             val_displs[part] = start_elem_it - m.values.begin();
@@ -147,7 +240,7 @@ SparseMatrix splitAndScatter(SparseMatrix &m, vector<int> &nnzs) {
         COMM_WORLD.Bcast(nnzs.data(), p, MPI::INT, MAIN_PROCESS);
 
         // scatter the fragments
-        my_part = SparseMatrix(n, partSize(false, r), 0, partStart(false, r), nnzs[r]);
+        my_part = SparseMatrix(n, colAPartSize(false, r), 0, colAPartStart(false, r), nnzs[r]);
         COMM_WORLD.Scatterv(m.values.data(), nnzs.data(), val_displs.data(), SparseMatrix::ELEM_TYPE,
                 my_part.values.data(), my_part.nnz(), SparseMatrix::ELEM_TYPE,
                 MAIN_PROCESS);
@@ -181,8 +274,8 @@ void replicateA(SparseMatrix &m, vector<int> &nnzs) {
     ONE_DBG cerr << "val_displs: " << val_displs;
 
     // Put this process's subpart into the right part of the vectors (to do an in-place allgatherv)
-    m.col_off = partStart(true, groupId());
-    m.width = partSize(true, groupId());
+    m.col_off = colAPartStart(true, groupId());
+    m.width = colAPartSize(true, groupId());
     ONE_DBG cerr << "groupId: " << groupId() << "  new col_off: " << m.col_off << "  new width: " << m.width << endl;
     m.values.reserve(val_displs.back());  // insert needed zero elements before current ones
     m.values.insert(m.values.begin(), val_displs[repl_rank], SparseMatrix::Elem());
@@ -206,8 +299,8 @@ DenseMatrix generateBFragment() {
     if (Flags::use_inner) {
         throw ShouldNotBeCalled("B generation for innerABC");
     } else {
-        return DenseMatrix(Flags::size, partSize(false, Flags::rank),
-                0, partStart(false, Flags::rank),
+        return DenseMatrix(Flags::size, colAPartSize(false, Flags::rank),
+                0, colAPartStart(false, Flags::rank),
                 generate_double, Flags::gen_seed);
     }
 }

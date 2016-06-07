@@ -13,13 +13,21 @@ using std::ostream;
 using std::vector;
 
 
-/// Return size of i-th matrix part (in rows/cols), either before replication (p parts) or after (p/c parts)
-int partSize(bool repl, int i);
-
-
-/// Return first index of i-th matrix part (in rows/cols), either before replication (p parts) or after (p/c parts)
-int partStart(bool repl, int i);
-int partEnd(bool repl, int i);
+/// Return size, start (inclusive) and end (exclusive) of i-th matrix part, in rows/cols,
+/// either before replication (p parts) or after (p/c parts).
+/// (1) for dividing A matrix in colA algorithm
+int colAPartSize(bool repl, int i);
+int colAPartStart(bool repl, int i);
+int colAPartEnd(bool repl, int i);
+/// (2) for dividing B matrix in innerABC algorithm
+int innerBPartSize(bool repl, int i);
+int innerBPartStart(bool repl, int i);
+int innerBPartEnd(bool repl, int i);
+/// (3) for dividing A matrix in innerABC algorithm
+int innerAPartSize(bool repl, int i);
+int innerAPartStart(bool repl, int i);
+int innerAPartEnd(bool repl, int i);
+int innerAWhichReplGroup(int i);
 
 
 void initPartSizes();

@@ -12,11 +12,14 @@ using std::string;
 #define DEBUG 0
 #endif
 
-#define DBG_ID cerr << "  [" << Flags::rank << " " << std::setw(20) << std::left << __FUNCTION__ << std::right << "] "
+#define DBG_ID cerr << "  [" << Flags::rank << " " \
+    << std::setw(20) << std::left << __FUNCTION__ \
+    << std::right << "] "
 #define IMHERE cerr << __FILE__ << ":" << __LINE__ << endl
 #define DBG if (DEBUG) DBG_ID; if (DEBUG)
 #define ONE_WORKER if (Flags::rank == ONE_WORKER_RANK)
-#define ONE_DBG if (DEBUG && Flags::rank == ONE_WORKER_RANK) DBG_ID; if (DEBUG && Flags::rank == ONE_WORKER_RANK)
+#define ONE_DBG if (DEBUG && Flags::rank == ONE_WORKER_RANK) DBG_ID; \
+                if (DEBUG && Flags::rank == ONE_WORKER_RANK)
 extern int ONE_WORKER_RANK;
 
 
