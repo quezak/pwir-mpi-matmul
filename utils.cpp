@@ -3,7 +3,11 @@
 #include <cstdlib>
 #include <getopt.h>
 #include <iostream>
+#include <mpi.h>
 
+#include "matrix_utils.hpp"
+
+using MPI::COMM_WORLD;
 using namespace std;
 
 
@@ -22,6 +26,7 @@ string Flags::sparse_filename = "";
 int Flags::size = NOT_SET;
 MPI::Intracomm Flags::group_comm;
 MPI::Intracomm Flags::repl_comm;
+MPI::Intracomm Flags::team_comm;
 
 
 bool Flags::parseArgv(int argc, char **argv) {
@@ -90,3 +95,51 @@ int groupId() { return groupId(Flags::rank); }
 
 int replId(int pid) { return pid / Flags::repl; }
 int replId() { return replId(Flags::rank); }
+
+
+static void initCommsColA();
+static void initCommsInnerABC();
+void initGroupComms() {
+    if (Flags::use_inner) initCommsInnerABC();
+    else initCommsColA();
+    if (Flags::repl > 1) {
+        ONE_DBG cerr << "repl comm rank: " << Flags::repl_comm.Get_rank() 
+            << "  size: " << Flags::repl_comm.Get_size() << endl;
+    }
+    ONE_DBG cerr << "group comm rank: " << Flags::group_comm.Get_rank() 
+        << "  size: " << Flags::group_comm.Get_size() << endl;
+}
+
+
+static void initCommsColA() {
+    if (Flags::repl > 1) {
+        // Communicator to replicate data (processes will have the same part of A)
+        // Unneded if no replication is done
+        int repl_id = Flags::rank % (Flags::procs / Flags::repl);
+        Flags::repl_comm = COMM_WORLD.Split(repl_id, Flags::rank);
+    }
+    // Communicator to rotate data (processes will have different parts, and together the whole A)
+    // Will be just one comm if c=1
+    int group_id = Flags::rank / (Flags::procs / Flags::repl);
+    Flags::group_comm = COMM_WORLD.Split(group_id, Flags::rank);
+}
+
+
+static void initCommsInnerABC() {
+    int p = Flags::procs;
+    int r = Flags::rank;
+    int c = Flags::repl;
+    if (c > 1) {
+        int team_id = r / c;
+        Flags::team_comm = COMM_WORLD.Split(team_id, r);
+        ONE_DBG cerr << "team comm rank: " << Flags::team_comm.Get_rank()
+            << "  size: " << Flags::team_comm.Get_size() << endl;
+        Flags::repl_comm = COMM_WORLD.Split(innerAWhichReplGroup(r), r);
+    }
+    // Comm to rotate data (the processes together have the whole A), each will have p/c processes,
+    // and the ranks should go as in parts_order in initPartSizesInnerA(), e.g. for p=27, c=3
+    // the first group comm should contain [0, 3, 6, 1, 4, 7, 2, 5, 8], in that order.
+    int group_id = r / (p/c);
+    int group_rank = ((r % c) * p) + r;  // the ranks don't have to be continous
+    Flags::group_comm = COMM_WORLD.Split(group_id, group_rank);
+}

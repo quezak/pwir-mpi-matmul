@@ -63,6 +63,7 @@ public:
     static int size;
     static MPI::Intracomm group_comm;  // processes which have different data (and together have the whole matrix)
     static MPI::Intracomm repl_comm;  // processes which have the same replicated data
+    static MPI::Intracomm team_comm;  // for innerABC: processes which have one block of B
 
     /// Process all the commandline options, return true if successful
     static bool parseArgv(int argc, char **argv);
@@ -84,5 +85,7 @@ int groupId(int pid);
 int replId();
 int replId(int pid);
 
+
+void initGroupComms();
 
 #endif  // UTILS_HPP

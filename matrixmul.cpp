@@ -28,20 +28,6 @@ int main(int argc, char * argv[]) {
     SparseMatrix::initElemType();
     if (!Flags::parseArgv(argc, argv))
         return mpi_return(3, "exiting");
-    if (Flags::repl > 1) {
-        // Communicator to replicate data (processes will have the same part of A)
-        // Unneded if no replication is done
-        int repl_id = Flags::rank % (Flags::procs / Flags::repl);
-        Flags::repl_comm = COMM_WORLD.Split(repl_id, Flags::rank);
-        ONE_DBG cerr << "repl comm rank: " << Flags::repl_comm.Get_rank() 
-            << "  size: " << Flags::repl_comm.Get_size() << endl;
-    }
-    // Communicator to rotate data (processes will have different parts, and together the whole A)
-    // Will be just one comm if c=1
-    int group_id = Flags::rank / (Flags::procs / Flags::repl);
-    Flags::group_comm = COMM_WORLD.Split(group_id, Flags::rank);
-    ONE_DBG cerr << "group comm rank: " << Flags::group_comm.Get_rank() 
-        << "  size: " << Flags::group_comm.Get_size() << endl;
 
     // ------- read CSR --------
     SparseMatrix A;
@@ -54,6 +40,7 @@ int main(int argc, char * argv[]) {
     Flags::size = A.height;  // the matrices are square and equal in size
     COMM_WORLD.Bcast(&Flags::size, 1, MPI::INT, MAIN_PROCESS);  // All processes need the size
     initPartSizes();
+    initGroupComms();
 
     return mpi_return(0, "---- STOP ----");
 
