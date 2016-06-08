@@ -1,6 +1,7 @@
 #include "matrix.hpp"
 
 #include <algorithm>
+#include <cstddef>
 #include <fstream>
 #include <iomanip>
 

@@ -11,6 +11,7 @@ using std::vector;
 using std::istream;
 using std::ostream;
 using std::function;
+using std::move;
 
 
 class DenseMatrix;
@@ -26,6 +27,7 @@ public:
     Matrix(int h, int w, int r_o, int c_o): height(h), width(w), row_off(r_o), col_off(c_o) {}
     Matrix(): Matrix(0, 0, 0, 0) {}
     Matrix(const Matrix &m) = default;
+    Matrix(Matrix && m) = default;
 
     /// Return value at given coordinates.
     virtual double& at(int row, int col) = 0;
@@ -65,6 +67,14 @@ public:
         return *this;
     }
 
+    virtual Matrix& operator= (Matrix &&m) {
+        height = m.height;
+        width = m.width;
+        row_off = m.row_off;
+        col_off = m.col_off;
+        return *this;
+    }
+
     virtual void print(ostream& output) const;
 
 };
@@ -90,6 +100,8 @@ public:
     DenseMatrix(int h, int w, int r_o, int c_o, MatrixGenerator gen, int seed);
     /// Copy
     DenseMatrix(const DenseMatrix &m): Matrix(m), data(m.data) {}
+    // Move
+    DenseMatrix(DenseMatrix &&m): Matrix(m), data(move(m.data)) {}
     /// Convert sparse to dense for debugging purposes
     explicit DenseMatrix(const SparseMatrix &m);
 
@@ -108,6 +120,12 @@ public:
     DenseMatrix& operator= (const DenseMatrix &m) {
         Matrix::operator=(m);
         data = m.data;
+        return *this;
+    }
+
+    DenseMatrix& operator= (DenseMatrix &&m) {
+        Matrix::operator=(m);
+        data = move(m.data);
         return *this;
     }
 
@@ -157,6 +175,8 @@ public:
     SparseMatrix() : SparseMatrix(0, 0, 0, 0) {}
     /// Copy
     SparseMatrix(const SparseMatrix &m): Matrix(m), values(m.values) {}
+    /// Move
+    SparseMatrix(SparseMatrix &&m): Matrix(m), values(move(m.values)) {}
 
     virtual double& at(int row, int col) override {
         throw ShouldNotBeCalled("at in SparseMatrix");
@@ -179,6 +199,12 @@ public:
     SparseMatrix& operator= (const SparseMatrix &m) {
         Matrix::operator=(m);
         values = m.values;
+        return *this;
+    }
+
+    SparseMatrix& operator= (SparseMatrix &&m) {
+        Matrix::operator=(m);
+        values = move(m.values);
         return *this;
     }
 

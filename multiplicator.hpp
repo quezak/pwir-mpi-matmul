@@ -19,6 +19,8 @@ private:
     int part_first = Flags::NOT_SET;
     int parts = Flags::NOT_SET;
     SparseMatrix send_A;  // a copy of A for sending, so it can be done in parallel with receiving
+    MPI::Request isend_req;
+    bool first_isend = true;
 
     void mulColA();
     void mulInnerABC();
