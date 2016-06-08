@@ -11,24 +11,24 @@ using namespace std;
 
 DenseMatrix Multiplicator::matmulInnerABC(int exponent, int replication) {
     c = replication;
-    parts = p/(c*c);
-    int rgrp = innerAWhichReplGroup(Flags::rank);
-    part_first = rgrp - (rgrp % (p/(c*c)));
-    part_id = part_first + Flags::group_comm.Get_rank();
+    parts = p/c;
+    part_first = 0;
+    part_id = Flags::group_comm.Get_rank();
     ONE_DBG cerr << "  gsize: " << Flags::group_comm.Get_size() << "  parts: " << parts
         << "  part_first: " << part_first << "  part_id: " << part_id << endl;
     ONE_DBG cerr << "initial sparse fragment: " << endl << A;
+    int shifts = p/(c*c);
     for (int iter = 0; iter < exponent; ++iter) {
-        for (int part = 0; part < parts; ++part) {
+        for (int shift = 0; shift < shifts; ++shift) {
             mulInnerABC();
-            ONE_DBG cerr << "after multiplication " << part << ": " << endl << C;
-            // no need for rotation after last part, impossible to rotate with one process
-            if (parts > 1 && part != parts-1) {
+            ONE_DBG cerr << "after multiplication " << shift << ": " << endl << C;
+            // no need for rotation after last shift, impossible to rotate with one process
+            if (shifts > 1 && shift != shifts-1) {
                 rotatePartA();
-                ONE_DBG cerr << "after rotation " << part << ": " << endl << A;
+                ONE_DBG cerr << "after rotation " << shift << ": " << endl << A;
             }
         }
-        if (iter != exponent-1 || Flags::show_results) {
+        if (c > 1 && (iter != exponent-1 || Flags::show_results)) {
             innerGatherC();
         }
         if (iter != exponent-1) {

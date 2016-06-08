@@ -240,7 +240,7 @@ static DenseMatrix gatherAndShowInnerBC(const DenseMatrix &m) {
     if (Flags::rank != ONE_WORKER_RANK) {
         gather_comm.Gatherv(m.rawData(), m.elems(), MPI::DOUBLE,
                 NULL, NULL, NULL, MPI::DOUBLE,  // recv params irrelevant
-                ONE_WORKER_RANK);
+                ONE_WORKER_RANK / c);
         return DenseMatrix();
     } else {
         DenseMatrix recvM(n, n, 0, 0);
@@ -251,7 +251,7 @@ static DenseMatrix gatherAndShowInnerBC(const DenseMatrix &m) {
         }
         gather_comm.Gatherv(m.rawData(), m.elems(), MPI::DOUBLE,
                 recvM.rawData(), counts.data(), displs.data(), MPI::DOUBLE,
-                ONE_WORKER_RANK);
+                ONE_WORKER_RANK / c);
         return recvM;
     }
 }
