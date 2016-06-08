@@ -114,8 +114,9 @@ public:
     void print(ostream& output) const override;
 
     double* rawData() { return data.data(); }
+    const double* rawData() const { return data.data(); }
 
-    int elems() { return data.size(); }
+    int elems() const { return data.size(); }
 
     int countGeElems(double bound) const;
     

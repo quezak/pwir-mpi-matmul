@@ -56,8 +56,6 @@ int main(int argc, char * argv[]) {
     if (isMainProcess())
         cerr << "Initial communication time: " << fixed << (comm_end -  comm_start) << "s" << endl;
 
-    return mpi_return(0, "---- STOP ----");
-
     // ------- compute C -------
     Multiplicator mult(A, B, nnzs);
     double comp_start = MPI::Wtime();
@@ -74,11 +72,11 @@ int main(int argc, char * argv[]) {
 
     if (Flags::show_results) {
         if (DEBUG) {
-            ONE_DBG cerr << "---- B ----" << endl;
-            gatherAndShow(B);
+            DenseMatrix whole_B = gatherAndShow(B);
+            ONE_DBG cerr << "---- B ----" << endl << whole_B;
         }
-        ONE_DBG cerr << "---- C ----" << endl;
-        gatherAndShow(C);
+        DenseMatrix whole_C = gatherAndShow(C);
+        ONE_DBG cerr << "---- C ----" << endl << whole_C;
     }
     if (Flags::count_ge) {
         int ge_elems = reduceGeElems(C, Flags::ge_element);

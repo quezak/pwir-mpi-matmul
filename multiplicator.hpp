@@ -16,11 +16,14 @@ private:
     int n;  // main matrix size
     int g_rank = Flags::NOT_SET;  // rank inside the rotation group
     int part_id = Flags::NOT_SET;
+    int part_first = Flags::NOT_SET;
     int parts = Flags::NOT_SET;
     SparseMatrix send_A;  // a copy of A for sending, so it can be done in parallel with receiving
 
     void mulColA();
-    void rotateColA();
+    void mulInnerABC();
+    void rotatePartA();
+    void innerGatherC();
 
 public:
     SparseMatrix A;  // A matrix part for each process

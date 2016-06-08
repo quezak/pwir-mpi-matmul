@@ -194,25 +194,65 @@ bool readSparseMatrix(const string &filename, SparseMatrix &matrix) {
 }
 
 
-void gatherAndShow(DenseMatrix &m) {
+// in colA, the dense matrices are divided in same sizes as A
+static DenseMatrix gatherAndShowColA(const DenseMatrix &m);
+// in innerABC, B and C are divided differently than A
+static DenseMatrix gatherAndShowInnerBC(const DenseMatrix &m);
+DenseMatrix gatherAndShow(const DenseMatrix &m) {
+    if (Flags::use_inner) return gatherAndShowInnerBC(m);
+    return gatherAndShowColA(m);
+}
+
+
+static DenseMatrix gatherAndShowColA(const DenseMatrix &m) {
     const int n = Flags::size;
     // we need to use Gatherv, because the counts can differ if size is not divisible by p
     if (Flags::rank != ONE_WORKER_RANK) {
         COMM_WORLD.Gatherv(m.rawData(), n * partASize(false, Flags::rank), MPI::DOUBLE,
                 NULL, NULL, NULL, MPI::DOUBLE,  // recv params are irrelevant for other processes
                 ONE_WORKER_RANK);
+        return DenseMatrix();
     } else {
         const int p = Flags::procs;
         DenseMatrix recvM(n, n, 0, 0);
-        vector<int> counts(p);
-        for (int i = 0; i < p; ++i) counts[i] = n * partASize(false, i);
-        vector<int> displs(Flags::procs);
-        for (int i = 1; i < p; ++i) displs[i] = n * partAStart(false, i);
+        vector<int> counts(p), displs(p);
+        for (int i = 0; i < p; ++i) {
+            counts[i] = n * partASize(false, i);
+            displs[i] = n * partAStart(false, i);
+        }
         COMM_WORLD.Gatherv(m.rawData(), n * partASize(false, Flags::rank), MPI::DOUBLE,
                 recvM.rawData(), counts.data(), displs.data(), MPI::DOUBLE,
                 ONE_WORKER_RANK);
-        // TODO change stream
-        cerr << recvM;
+        return recvM;
+    }
+}
+
+
+static DenseMatrix gatherAndShowInnerBC(const DenseMatrix &m) {
+    const int r = Flags::rank;
+    const int n = Flags::size;
+    const int c = Flags::repl;
+    const int p = Flags::procs;
+    // Processes that are in other layer than ONE_WORKER won't take part in this
+    int layer_id = (r % c == ONE_WORKER_RANK % c) ? 1 : MPI::UNDEFINED;
+    MPI::Intracomm gather_comm = COMM_WORLD.Split(layer_id, r);
+    if (r % c != ONE_WORKER_RANK % c) return DenseMatrix();
+    if (Flags::rank != ONE_WORKER_RANK) {
+        gather_comm.Gatherv(m.rawData(), m.elems(), MPI::DOUBLE,
+                NULL, NULL, NULL, MPI::DOUBLE,  // recv params irrelevant
+                ONE_WORKER_RANK);
+        return DenseMatrix();
+    } else {
+        DenseMatrix recvM(n, n, 0, 0);
+        vector<int> counts(p/c), displs(p/c);
+        for (int i = 0; i < p/c; ++i) {
+            counts[i] = n * innerBPartSize(true, i);
+            displs[i] = n * innerBPartStart(true, i);
+        }
+        gather_comm.Gatherv(m.rawData(), m.elems(), MPI::DOUBLE,
+                recvM.rawData(), counts.data(), displs.data(), MPI::DOUBLE,
+                ONE_WORKER_RANK);
+        return recvM;
     }
 }
 
@@ -379,5 +419,8 @@ int reduceGeElems(const DenseMatrix &m_part, double bound) {
     int count = 0;
     ONE_DBG cerr << "part count: " << part_count << endl;
     COMM_WORLD.Reduce(&part_count, &count, 1, MPI::INT, MPI::SUM, ONE_WORKER_RANK);
+    // if show_results is off, every process in innerABC has just his part of result matrix,
+    // otherwise every process has the whole colblock of B so final result needs to be divided bv c.
+    if (Flags::use_inner && Flags::show_results && Flags::repl > 1) return count / Flags::repl;
     return count;
 }
