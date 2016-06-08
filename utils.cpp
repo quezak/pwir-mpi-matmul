@@ -129,7 +129,7 @@ static void initCommsInnerABC() {
     int r = Flags::rank;
     int c = Flags::repl;
     if (c > 1) {
-        int team_id = r / c;
+        int team_id = innerBWhichReplGroup(r);
         Flags::team_comm = COMM_WORLD.Split(team_id, r);
         ONE_DBG cerr << "team comm rank: " << Flags::team_comm.Get_rank()
             << "  size: " << Flags::team_comm.Get_size() << endl;

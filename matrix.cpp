@@ -75,7 +75,8 @@ void SparseMatrix::print(ostream &output) const {
 
 
 void DenseMatrix::print(ostream &output) const {
-    DBG output << "dense " << height << " x " << width << endl;
+    DBG output << "dense " << height << " x " << width
+        << ", row_off: " << row_off << ", col_off: " << col_off << endl;
     Matrix::print(output);
 }
 

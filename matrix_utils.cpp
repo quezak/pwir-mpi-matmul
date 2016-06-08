@@ -22,6 +22,7 @@ static vector<int> colA_small_counts, colA_small_displs,
 static vector<int> colA_repl_counts, colA_repl_displs,
     iA_repl_counts, iA_repl_displs,
     iB_repl_counts, iB_repl_displs;
+static vector<int> a_part_order;
 
 
 static int idxsForPart(int size, int parts, int rank) {
@@ -58,11 +59,13 @@ static void initPartSizesColA() {
     // all block columns), but will make easier to replicate later
     for (int imod = 0; imod < p/c; ++imod) {
         for (int i = imod; i < p; i += p/c) {
+            a_part_order.push_back(i);
             colA_small_displs[i] = sum;
             sum += colA_small_counts[i];
         }
     }
     colA_small_displs.push_back(sum);
+    ONE_DBG cerr << "     a_part_order: " << a_part_order;
     ONE_DBG cerr << "colA_small_counts: " << colA_small_counts;
     ONE_DBG cerr << "colA_small_displs: " << colA_small_displs;
     if (c == 1) {
@@ -83,25 +86,25 @@ static void initPartSizesInnerA() {
     int p = Flags::procs;
     int c = Flags::repl;
     int n = Flags::size;
-    vector<int> part_order(p);
-    for (int i = 0; i < p; ++i) part_order[i] = i;
-    sort(part_order.begin(), part_order.end(), [](int a, int b) {
-            // assign the parts first by repl group, then rank
+    a_part_order.resize(p);
+    for (int i = 0; i < p; ++i) a_part_order[i] = i;
+    // assign the parts first by repl group, then rank
+    sort(a_part_order.begin(), a_part_order.end(), [](int a, int b) {
             return (innerAWhichReplGroup(a) == innerAWhichReplGroup(b)
                     ? a < b
                     : innerAWhichReplGroup(a) < innerAWhichReplGroup(b));
             });
-    // assign sizes in part_order, to get more evenly distributed sizes after replication
+    // assign sizes in a_part_order, to get more evenly distributed sizes after replication
     for (int i = 0; i < p; ++i)
-        iA_small_counts.push_back(idxsForPart(n, p, part_order[i]));
+        iA_small_counts.push_back(idxsForPart(n, p, a_part_order[i]));
     int sum = 0;
     iA_small_displs.resize(p+1);
     for (int i = 0; i < p; ++i) {
-        iA_small_displs[part_order[i]] = sum;
-        sum += iA_small_counts[part_order[i]];
+        iA_small_displs[a_part_order[i]] = sum;
+        sum += iA_small_counts[a_part_order[i]];
     }
     iA_small_displs[p] = sum;
-    ONE_DBG cerr << "     part_order: " << part_order;
+    ONE_DBG cerr << "   a_part_order: " << a_part_order;
     ONE_DBG cerr << "iA_small_counts: " << iA_small_counts;
     ONE_DBG cerr << "iA_small_displs: " << iA_small_displs;
     if (c == 1) {
@@ -152,6 +155,11 @@ int innerAWhichReplGroup(int i) {
     int p = Flags::procs;
     int c = Flags::repl;
     return ((i / c) + ((i % c) * (p/(c*c)))) % (p/c);
+}
+
+
+int innerBWhichReplGroup(int i) {
+    return i / Flags::repl;
 }
 
 
@@ -271,9 +279,6 @@ SparseMatrix splitAndScatter(SparseMatrix &m, vector<int> &nnzs) {
 
 
 void replicateA(SparseMatrix &m, vector<int> &nnzs) {
-    if (Flags::use_inner) {
-        throw ShouldNotBeCalled("A replication in innerABC");
-    }
     // Matrix division before replication: p almost-equal block columns:
     //  p[0] has first, p[p/c] has 2nd, p[2p/c] the 3rd, ...
     //  p[1] has (p/c)th, p[p/c+1] has (p/c+1)th, ...
@@ -282,6 +287,7 @@ void replicateA(SparseMatrix &m, vector<int> &nnzs) {
     // When returning, nnzs should be filled for each group_comm separately.
     int c = Flags::repl;  // should be equal to repl_comm.Get_size()
     int p = Flags::procs;
+    int r = Flags::rank;
     int repl_rank = Flags::repl_comm.Get_rank();
     vector<int> val_counts, val_displs;
 
@@ -289,16 +295,32 @@ void replicateA(SparseMatrix &m, vector<int> &nnzs) {
     val_counts.reserve(c);
     val_displs.reserve(c+1);
     val_displs.push_back(0);
-    for (int i = Flags::rank % (p/c); i < p; i += p/c) {
-        val_counts.push_back(nnzs[i]);
-        val_displs.push_back(val_displs.back() + nnzs[i]);
+    if (!Flags::use_inner) {
+        for (int i = Flags::rank % (p/c); i < p; i += p/c) {
+            val_counts.push_back(nnzs[i]);
+            val_displs.push_back(val_displs.back() + nnzs[i]);
+        }
+    } else {
+        int rgrp = innerAWhichReplGroup(r);
+        for (int i = 0; i < p; ++i) {
+            if (innerAWhichReplGroup(i) == rgrp) {
+                ONE_DBG cerr << "adding " << i << endl;
+                val_counts.push_back(nnzs[i]);
+                val_displs.push_back(val_displs.back() + nnzs[i]);
+            }
+        }
     }
     ONE_DBG cerr << "val_counts: " << val_counts;
     ONE_DBG cerr << "val_displs: " << val_displs;
 
     // Put this process's subpart into the right part of the vectors (to do an in-place allgatherv)
-    m.col_off = colAPartStart(true, groupId());
-    m.width = colAPartSize(true, groupId());
+    if (!Flags::use_inner) {
+        m.col_off = partAStart(true, groupId());
+        m.width = partASize(true, groupId());
+    } else {
+        m.row_off = partAStart(true, innerAWhichReplGroup(r));
+        m.height = partASize(true, innerAWhichReplGroup(r));
+    }
     ONE_DBG cerr << "groupId: " << groupId() << "  new col_off: " << m.col_off << "  new width: " << m.width << endl;
     m.values.reserve(val_displs.back());  // insert needed zero elements before current ones
     m.values.insert(m.values.begin(), val_displs[repl_rank], SparseMatrix::Elem());
@@ -312,8 +334,14 @@ void replicateA(SparseMatrix &m, vector<int> &nnzs) {
 
     // calculate new nnzs
     vector<int> new_nnzs(p/c, 0);
-    for (int i = 0; i < (int) nnzs.size(); ++i)
-        new_nnzs[i % (p/c)] += nnzs[i];
+    if (!Flags::use_inner) {
+        for (int i = 0; i < (int) nnzs.size(); ++i)
+            new_nnzs[i % (p/c)] += nnzs[i];
+    } else {
+        for (int i = 0; i < (int) nnzs.size(); ++i)
+            new_nnzs[innerAWhichReplGroup(i)] += nnzs[i];
+    }
+    ONE_DBG cerr << "new_nnzs: " << new_nnzs;
     nnzs = new_nnzs;
 }
 
@@ -328,7 +356,20 @@ DenseMatrix generateBFragment() {
         if (c == 1) return DenseMatrix(Flags::size, innerBPartSize(false, Flags::rank),
                 0, innerBPartStart(false, Flags::rank),
                 generate_double, Flags::gen_seed);
-        throw ShouldNotBeCalled("B replication in innerABC");
+        // else : c > 1
+        int r = Flags::rank;
+        int part_id = innerBWhichReplGroup(r);
+        DenseMatrix b_part;
+        if (Flags::team_comm.Get_rank() == MAIN_PROCESS) {  // Main team process: generate B part
+            b_part = DenseMatrix(Flags::size, innerBPartSize(true, part_id),
+                    0, innerBPartStart(true, part_id),
+                    generate_double, Flags::gen_seed);
+        } else {  // other team process: receive B part
+            b_part = DenseMatrix(Flags::size, innerBPartSize(true, part_id),
+                    0, innerBPartStart(true, part_id));
+        }
+        Flags::team_comm.Bcast(b_part.rawData(), b_part.elems(), MPI::DOUBLE, MAIN_PROCESS);
+        return b_part;
     }
 }
 

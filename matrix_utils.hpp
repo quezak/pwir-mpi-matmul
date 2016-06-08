@@ -24,6 +24,7 @@ int innerBPartSize(bool repl, int i);
 int innerBPartStart(bool repl, int i);
 int innerBPartEnd(bool repl, int i);
 int innerAWhichReplGroup(int i);
+int innerBWhichReplGroup(int i);
 
 
 void initPartSizes();
