@@ -9,7 +9,14 @@ MATMUL   = matrixmul
 DEPS     = densematgen.o matrix_utils.o matrix.o utils.o multiplicator.o
 DEPFILE  = .dependencies
 
-all:
+LATEX    = pdflatex
+LTXFLAGS = -shell-escape
+REPORT   = report.pdf
+
+all: binary $(REPORT)
+
+.PHONY: binary
+binary:
 	$(MAKE) $(MAKEOPTS) $(DEPFILE)
 	$(MAKE) $(MAKEOPTS) $(MATMUL)
 
@@ -27,5 +34,9 @@ $(MATMUL): $(MATMUL).o $(DEPS)
 %.o: %.cpp %.hpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
+%.pdf: %.tex
+	$(LATEX) $(LTXFLAGS) $<
+	$(LATEX) $(LTXFLAGS) $<
+
 clean:
-	rm -f *.o *core *~ *.out *.err $(MATMUL)
+	rm -f *.o *core *~ *.out *.err $(MATMUL) *.{log,aux,toc,pdf}

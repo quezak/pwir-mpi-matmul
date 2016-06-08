@@ -6,3 +6,8 @@ matrixmul
 *.swp
 *.swo
 core
+
+*.log
+*.aux
+*.pdf
+*.toc

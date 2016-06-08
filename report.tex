@@ -1,0 +1,101 @@
+\documentclass[a4paper,12pt,oneside]{article}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsfonts}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[english,polish]{babel}
+\usepackage{fancyhdr}
+\usepackage{geometry}
+\usepackage{multicol}
+\usepackage{enumerate}
+\usepackage{xcolor}
+\usepackage{lastpage}
+\usepackage{hyperref}
+\geometry{verbose,a4paper,tmargin=2.4cm,bmargin=2cm,rmargin=1.5cm,lmargin=1.5cm}
+\definecolor{bg}{rgb}{0.95,0.95,0.95}
+
+\begin{document}
+\pagestyle{fancy}
+\lfoot{}
+\rfoot{\LaTeX}
+\cfoot{\thepage/\pageref{LastPage}}
+\lhead{\textbf{Artur Kozak} [320770]}
+\chead{PWiR 2016, projekt MPI}
+\rhead{08.06.2016}
+\begin{center}
+	\LARGE{\textsc{PWiR 2016 -- projekt z MPI}}\\\normalsize{}
+\end{center}
+\vspace{2em}
+
+Ninejszy program zaliczeniowy implementuje dwa z algorytmów mnożenia macierzy rzadkich przez gęste
+z ograniczeniem komunikacji: \emph{1.5D Blocked Column A} oraz \emph{1.5D Blocked Inner ABC}, opisanych
+w \href{http://www.eecs.berkeley.edu/~penpornk/spdm3\_ipdps16.pdf}{pracy P.Koanantakool et al}.
+Program napisany jest w C++11 i przetestowany z biblioteką {\tt openmpi-1.10.2} na moim komputerze
+oraz {\tt mpich2} na maszynie {\tt students}.
+
+\section{Implementacja}
+
+\subsection{Struktura projektu (moduły C++)}
+
+\begin{itemize}
+    \item {\tt matrixmul.cpp:} główny moduł programu, integrujący kolejne komponenty.
+    \item {\tt matrix.hpp:} implementacja macierzy: abstrakcyjny interfejs wraz z dwoma implementacjami
+        {\tt DenseMatrix} oraz {\tt SparseMatrix}. Macierz rzadka, ze względu na inny zapis danych,
+        posiada dodatkowe metody do dzielenia jej na bloki.
+    \item {\tt matrix\_utils.hpp:} dodatkowe potrzebne operacje na macierzach: indeksowanie
+        rozdzielanych podmacierzy i grup replikacji, rozdzielanie, generowanie i zbieranie podmacierzy i wyników.
+    \item {\tt multiplicator.hpp:} implementacja zadanych algorytmów.
+    \item {\tt utils.hpp:} procedury pomocnicze: narzędzia diagnostyczne i flagi wywołania.
+\end{itemize}
+
+\subsection{Dodatkowe parametry}
+
+\begin{itemize}
+    \item Jeśli projekt zostanie skompilowany z flagą {\tt -DDEBUG=1} (patrz plik {\tt Makefile}),
+        włączone zostanie wypisywanie informacji diagnostycznych. Jednocześnie polecenia diagnostyczne
+        napisane są tak, że przy braku tej flagi ich kod powinien być kompletnie wyoptymalizowany z pliku wykonywalnego.
+    \item Żeby uniknąć mieszania się strumieni wyjścia różnych procesów, tylko jeden wypisuje
+        komunikaty diagnostyczne -- domyślnie jest to proces $0$, ale można podać inną wartość
+        przez dodatkowy parametr wywołania {\tt -O <ONE\_WORKER\_RANK>}. Nie gwarantuję poprawności
+        działania dla wszystkich wartości większych od $2$.
+\end{itemize}
+
+\section{Optymalizacje}
+
+\begin{itemize}
+    \item {\bf Reprezentacja macierzy gęstych:} wartości macierzy przechowywane są w pojedynczym
+        bloku pamięci, w kolejności kolumnowej. Istotnie upraszcza to dzielenie i łączenie sąsiednich bloków kolumn
+        (wystarczy rozciąć/skleić wektory danych), jak i przesyłanie danych przy użyciu MPI (przesyłanie całej macierzy
+        jednym komunikatem, możliwość dzielenia i łączenia in-place).
+    \item {\bf Reprezentacja macierzy rzadkich:} wartości macierzy przechowywane są w pojedynczym
+        bloku pamięci, jako krotki $(val,\,row,\,col)$. Uproszczenie procesu dzielenia, łączenia
+        i przesyłania jest analogiczne jak przy macierzach gęstych -- podmacierze (niekoniecznie sąsiadujące!)
+        można po prostu konkatenować. Co więcej, elementy można łatwo posortować w porządku wierszowym
+        lub kolumnowym, po czym w czasie logarytmicznym znajdywać konkretne elementy.
+        Wejściowy format CSR przy tych operacjach powodował więcej okazji do błędów niż korzyści,
+        ponadto raczej nie dało się tak zapisanej macierzy wysłać jednym komunikatem.
+    \item {\bf Własny typ MPI} dla wyżej opisanej struktury elementu macierzy rzadkiej -- dzięki temu
+        można przesyłać dane macierzy rzadkiej jednym komunikatem -- zamiast osobno wartości typu
+        {\tt double} i pozycji typu {\tt int}, lub niebezpiecznych i nieczytelnych kombinacji
+        z rzutowaniem typów pamięci.
+    \item {\bf Zaawansowane funkcje MPI:} użycie funkcji {\tt Allgatherv}, {\tt Scatterv},
+        {\tt Allreduce} pozwala wymienić wiele danych przy zredukowanej liczbie komunikatów. W niektórych
+        przypadkach dalszym usprawnieniem jest użycie opcji {\tt MPI::IN\_PLACE} w której proces
+        źródłowy komunikatu grupowego nie musi kopiować swojej wartości do nowego bufora.
+    \item {\bf Użycie dodatkowych komunikatorów} pozwala na komunikację grupową tylko części procesów.
+    \item {\bf Wybór procesów do komunikatorów:} do komunikacji wykonywanych najwięcej razy,
+        czyli przesyłania zreplikowanych części macierzy $A$, zgrupowałem razem procesy o bliskich 
+        sobie (a wręcz kolejnych) rangach, przez co w prawdziwym klastrze powinny się komunikować lepiej niż
+        te o rangach odległych.
+    \item {\bf Redukcja komunikacji:} na przykład, po ostatnim mnożeniu w każdej iteracji
+        nie trzeba rotować podmacierzy $A$ między procesami -- w kolejnej iteracji proces zacznie od ostatniego
+        fragmentu, później i tak dostanie pierwszy, drugi, i tak dalej, w efekcie mnożąc swoją
+        część macierzy $B$ przez całą macierz $A$, tak jak zamierzaliśmy.
+    \item {\bf Unikanie niepotrzebnej komunikacji:} tam gdzie to możliwe, każdy proces sam z góry
+        oblicza dane, np. pozycje i rozmiary części macierzy w różnych wariantach, przez co nie trzeba
+        ich przesyłać. Tak samo liczby elementów podmacierzy rzadkich (ponieważ nie znając macierzy nie da się ich obliczyć)
+        są obliczane tylko raz, a później utrzymywane i sumowane przy łączeniu przez każdy proces osobno.
+\end{itemize}
+
+\end{document}

@@ -129,10 +129,10 @@ void Multiplicator::rotatePartA() {
 
 void Multiplicator::innerGatherC() {
     ONE_DBG cerr << "---- before gather C ----" << endl << C;
+    // note: we could do this a bit faster by extracting the nonzero part and doing an Allgatherv,
+    // but then we'd have to reorganize the data yet again -- because the matrix is stored in column
+    // order, and here we want to concatenate row-block submatrices. Figuring out the proper
+    // indexing would probably cause more errors than profits.
     Flags::team_comm.Allreduce(MPI::IN_PLACE, C.rawData(), C.elems(), MPI::DOUBLE, MPI::SUM);
     ONE_DBG cerr << "---- after gather C ----" << endl << C;
-    //int pcc = p / (c*c);
-    //// We need to reorganize the data for gathering, because dense matrix is stored by columns
-    //vector<double> recv_c(C.elems());
-    //vector<int> c_counts(pcc), c_displs(pcc);
 }
