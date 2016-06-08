@@ -61,8 +61,12 @@ istream& operator>>(istream& input, SparseMatrix& m) {
 
 void Matrix::print(ostream &output) const {
     for (int i = 0; i < height; ++i) {
-        for (int j = 0; j < width; ++j)
-            output << fixed << setprecision(5) << setw(10) << get(i, j);
+        for (int j = 0; j < width; ++j) {
+            output << fixed << setprecision(5);
+            if (DEBUG) output << setw(10);
+            else output << " ";
+            output << get(i, j);
+        }
         output << endl;
     }
 }
@@ -90,7 +94,6 @@ void SparseMatrix::Elem::print(ostream &output) const {
 
 /// Return value at given coordinates.
 double SparseMatrix::get(int row, int col) const {
-    // TODO check if we need this to be faster than linear (can be log(size) if we sort the elems)
     for (const Elem &elem : values)
         if (elem.at(row + row_off, col + col_off)) return elem.val;
     return 0.0;

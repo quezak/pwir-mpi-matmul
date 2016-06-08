@@ -22,6 +22,7 @@ int mpi_return(int code, const string &msg = "") {
 int main(int argc, char * argv[]) {
 
     // ------- init args and mpi -----
+    ios_base::sync_with_stdio(0);  // safe, we don't use stdio
     MPI::Init(argc, argv);
     Flags::procs = COMM_WORLD.Get_size();
     Flags::rank = COMM_WORLD.Get_rank();
@@ -70,20 +71,27 @@ int main(int argc, char * argv[]) {
     if (isMainProcess())
         cerr << "Computation time: " << fixed << (comp_end - comp_start) << "s" << endl;
 
+    // ------- output results -------
     if (Flags::show_results) {
         if (DEBUG) {
             DenseMatrix whole_B = gatherAndShow(B);
             ONE_DBG cerr << "---- B ----" << endl << whole_B;
         }
         DenseMatrix whole_C = gatherAndShow(C);
-        ONE_DBG cerr << "---- C ----" << endl << whole_C;
+        if (DEBUG) {  // in debug mode, output everything to stderr to avoid stream mixing
+            ONE_DBG cerr << "---- C ----" << endl << whole_C;
+        } else {
+            ONE_WORKER cout << whole_C;
+        }
     }
     if (Flags::count_ge) {
         int ge_elems = reduceGeElems(C, Flags::ge_element);
-        ONE_DBG cerr << "---- elems >= " << fixed << setprecision(5) << Flags::ge_element
-            << " ----" << endl;
-        // TODO change stream
-        ONE_WORKER cerr << ge_elems << endl;
+        if (DEBUG) {  // in debug mode, output everything to stderr to avoid stream mixing
+            ONE_DBG cerr << "---- elems >= " << fixed << setprecision(5) << Flags::ge_element
+                << " ----" << endl << ge_elems << endl;
+        } else {
+            ONE_WORKER cout << ge_elems << endl;
+        }
     }
 
     return mpi_return(0);

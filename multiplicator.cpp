@@ -111,13 +111,12 @@ void Multiplicator::rotatePartA() {
         << "  gsize: " << Flags::group_comm.Get_size() << "  parts: " << parts << endl;
     part_id = (part_id == part_first) ? part_first + parts - 1 : part_id - 1;
     // Prepare send & recv buffers
-    send_A = A;  // TODO check if this can use move-constructor
+    send_A = A;
     A = SparseMatrix(send_A.height, partASize(true, part_id),
             0, partAStart(true, part_id), nnzs[part_id]);
     ONE_DBG cerr << "recv part_id: " << part_id << "  width: " << A.width
         << "  nnz: " << A.nnz() << "  new nnzs: " << nnzs;
     // Send our part of A to the next process asynchronously
-    // TODO check if we need to wait for the previous loop's Isend
     Flags::group_comm.Isend(send_A.values.data(), send_A.nnz(), SparseMatrix::ELEM_TYPE,
             next, ROTATE_SPARSE_BLOCK_COL);
     // Receive next part of A from prev process

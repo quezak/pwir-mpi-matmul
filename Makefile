@@ -1,6 +1,7 @@
 CC       = mpicc
 CXX      = mpic++
-ALLFLAGS = -Wall -g -DDEBUG=1
+#ALLFLAGS = -Wall -g -DDEBUG=1
+ALLFLAGS = -Wall -O3
 CFLAGS   = $(ALLFLAGS) -std=c99
 CXXFLAGS = $(ALLFLAGS) -std=c++11
 LDFLAGS  = $(ALLFLAGS) -std=c++11
