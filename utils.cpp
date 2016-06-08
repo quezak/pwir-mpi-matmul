@@ -126,7 +126,6 @@ static void initCommsColA() {
 
 
 static void initCommsInnerABC() {
-    int p = Flags::procs;
     int r = Flags::rank;
     int c = Flags::repl;
     if (c > 1) {
@@ -136,10 +135,17 @@ static void initCommsInnerABC() {
             << "  size: " << Flags::team_comm.Get_size() << endl;
         Flags::repl_comm = COMM_WORLD.Split(innerAWhichReplGroup(r), r);
     }
-    // Comm to rotate data (the processes together have the whole A), each will have p/c processes,
-    // and the ranks should go as in parts_order in initPartSizesInnerA(), e.g. for p=27, c=3
-    // the first group comm should contain [0, 3, 6, 1, 4, 7, 2, 5, 8], in that order.
-    int group_id = r / (p/c);
-    int group_rank = ((r % c) * p) + r;  // the ranks don't have to be continous
-    Flags::group_comm = COMM_WORLD.Split(group_id, group_rank);
+    // Comm to rotate data: processes which operate on the same part of the result matrix C,
+    // each of size p/(c^2). For example, for p=27 and c=3, the division is:
+    // [0,3,6],[1,4,7],[2,5,8],[9,12,15],[10,13,16],...
+    Flags::group_comm = COMM_WORLD.Split(innerGroupId(), r);
 }
+
+
+int innerGroupId() { return innerGroupId(Flags::rank); }
+int innerGroupId(int pid) {
+    int p = Flags::procs;
+    int c = Flags::repl;
+    return ((pid / (p/c)) * c) + (pid % c);
+}
+

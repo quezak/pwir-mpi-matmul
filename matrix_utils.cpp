@@ -155,14 +155,19 @@ int innerAWhichReplGroup(int i) {
 }
 
 
-int colAPartSize(bool repl, int i) { return repl ? colA_repl_counts[i] : colA_small_counts[i]; }
-int colAPartStart(bool repl, int i) { return repl ? colA_repl_displs[i] : colA_small_displs[i]; }
-int colAPartEnd(bool repl, int i) { return colAPartStart(repl, i) + colAPartSize(repl, i); }
+static int colAPartSize(bool repl, int i) { return repl ? colA_repl_counts[i] : colA_small_counts[i]; }
+static int colAPartStart(bool repl, int i) { return repl ? colA_repl_displs[i] : colA_small_displs[i]; }
+static int colAPartEnd(bool repl, int i) { return colAPartStart(repl, i) + colAPartSize(repl, i); }
 
 
-int innerAPartSize(bool repl, int i) { return repl ? iA_repl_counts[i] : iA_small_counts[i]; }
-int innerAPartStart(bool repl, int i) { return repl ? iA_repl_displs[i] : iA_small_displs[i]; }
-int innerAPartEnd(bool repl, int i) { return innerAPartStart(repl, i) + innerAPartSize(repl, i); }
+static int innerAPartSize(bool repl, int i) { return repl ? iA_repl_counts[i] : iA_small_counts[i]; }
+static int innerAPartStart(bool repl, int i) { return repl ? iA_repl_displs[i] : iA_small_displs[i]; }
+static int innerAPartEnd(bool repl, int i) { return innerAPartStart(repl, i) + innerAPartSize(repl, i); }
+
+
+int partASize(bool repl, int i) { return Flags::use_inner ? innerAPartSize(repl, i) : colAPartSize(repl,i); }
+int partAStart(bool repl, int i) { return Flags::use_inner ? innerAPartStart(repl, i) : colAPartStart(repl,i); }
+int partAEnd(bool repl, int i) { return Flags::use_inner ? innerAPartEnd(repl, i) : colAPartEnd(repl,i); }
 
 
 int innerBPartSize(bool repl, int i) { return repl ? iB_repl_counts[i] : iB_small_counts[i]; }
@@ -185,17 +190,17 @@ void gatherAndShow(DenseMatrix &m) {
     const int n = Flags::size;
     // we need to use Gatherv, because the counts can differ if size is not divisible by p
     if (Flags::rank != ONE_WORKER_RANK) {
-        COMM_WORLD.Gatherv(m.rawData(), n * colAPartSize(false, Flags::rank), MPI::DOUBLE,
+        COMM_WORLD.Gatherv(m.rawData(), n * partASize(false, Flags::rank), MPI::DOUBLE,
                 NULL, NULL, NULL, MPI::DOUBLE,  // recv params are irrelevant for other processes
                 ONE_WORKER_RANK);
     } else {
         const int p = Flags::procs;
         DenseMatrix recvM(n, n, 0, 0);
         vector<int> counts(p);
-        for (int i = 0; i < p; ++i) counts[i] = n * colAPartSize(false, i);
+        for (int i = 0; i < p; ++i) counts[i] = n * partASize(false, i);
         vector<int> displs(Flags::procs);
-        for (int i = 1; i < p; ++i) displs[i] = n * colAPartStart(false, i);
-        COMM_WORLD.Gatherv(m.rawData(), n * colAPartSize(false, Flags::rank), MPI::DOUBLE,
+        for (int i = 1; i < p; ++i) displs[i] = n * partAStart(false, i);
+        COMM_WORLD.Gatherv(m.rawData(), n * partASize(false, Flags::rank), MPI::DOUBLE,
                 recvM.rawData(), counts.data(), displs.data(), MPI::DOUBLE,
                 ONE_WORKER_RANK);
         // TODO change stream
@@ -213,7 +218,11 @@ SparseMatrix splitAndScatter(SparseMatrix &m, vector<int> &nnzs) {
     if (!isMainProcess()) {
         nnzs.resize(p);
         COMM_WORLD.Bcast(nnzs.data(), p, MPI::INT, MAIN_PROCESS);
-        my_part = SparseMatrix(n, colAPartSize(false, r), 0, colAPartStart(false, r), nnzs[r]);
+        if (Flags::use_inner) {  // receive a block-row for innerABC
+            my_part = SparseMatrix(partASize(false, r), n, partAStart(false, r), 0, nnzs[r]);
+        } else {  // receive a block-col for colA
+            my_part = SparseMatrix(n, partASize(false, r), 0, partAStart(false, r), nnzs[r]);
+        }
         COMM_WORLD.Scatterv(NULL, NULL, NULL, MPI::DOUBLE, // ignored for non-root
                 my_part.values.data(), my_part.nnz(), SparseMatrix::ELEM_TYPE,
                 MAIN_PROCESS);
@@ -221,15 +230,22 @@ SparseMatrix splitAndScatter(SparseMatrix &m, vector<int> &nnzs) {
         nnzs.resize(p);
         vector<int> val_displs(p);
 
-        // Sort values by columns and find starts of each block, so we can send directly from m
-        sort(m.values.begin(), m.values.end(), SparseMatrix::Elem::colOrder);
+        // Sort values by row/col and find starts of each block, so we can send directly from m
+        auto elem_comparator = (Flags::use_inner
+                ? SparseMatrix::Elem::rowOrder
+                : SparseMatrix::Elem::colOrder);
+        sort(m.values.begin(), m.values.end(), elem_comparator);
         for (int part = 0; part < p; ++part) {
+            auto start_elem = (Flags::use_inner
+                    ? SparseMatrix::Elem(0.0, partAStart(false, part), -1)
+                    : SparseMatrix::Elem(0.0, -1, partAStart(false, part)));
+            auto end_elem = (Flags::use_inner
+                    ? SparseMatrix::Elem(0.0, partAEnd(false, part), -1)
+                    : SparseMatrix::Elem(0.0, -1, partAEnd(false, part)));
             auto start_elem_it = lower_bound(m.values.begin(), m.values.end(),
-                    SparseMatrix::Elem(0.0, -1, colAPartStart(false, part)),
-                    SparseMatrix::Elem::colOrder);
+                    start_elem, elem_comparator);
             auto end_elem_it = lower_bound(m.values.begin(), m.values.end(),
-                    SparseMatrix::Elem(0.0, -1, colAPartEnd(false, part)),
-                    SparseMatrix::Elem::colOrder);
+                    end_elem, elem_comparator);
             nnzs[part] = end_elem_it - start_elem_it;
             val_displs[part] = start_elem_it - m.values.begin();
         }
@@ -240,7 +256,11 @@ SparseMatrix splitAndScatter(SparseMatrix &m, vector<int> &nnzs) {
         COMM_WORLD.Bcast(nnzs.data(), p, MPI::INT, MAIN_PROCESS);
 
         // scatter the fragments
-        my_part = SparseMatrix(n, colAPartSize(false, r), 0, colAPartStart(false, r), nnzs[r]);
+        if (Flags::use_inner) {  // receive a block-row for innerABC
+            my_part = SparseMatrix(partASize(false, r), n, partAStart(false, r), 0, nnzs[r]);
+        } else {  // receive a block-col for colA
+            my_part = SparseMatrix(n, partASize(false, r), 0, partAStart(false, r), nnzs[r]);
+        }
         COMM_WORLD.Scatterv(m.values.data(), nnzs.data(), val_displs.data(), SparseMatrix::ELEM_TYPE,
                 my_part.values.data(), my_part.nnz(), SparseMatrix::ELEM_TYPE,
                 MAIN_PROCESS);
@@ -251,6 +271,9 @@ SparseMatrix splitAndScatter(SparseMatrix &m, vector<int> &nnzs) {
 
 
 void replicateA(SparseMatrix &m, vector<int> &nnzs) {
+    if (Flags::use_inner) {
+        throw ShouldNotBeCalled("A replication in innerABC");
+    }
     // Matrix division before replication: p almost-equal block columns:
     //  p[0] has first, p[p/c] has 2nd, p[2p/c] the 3rd, ...
     //  p[1] has (p/c)th, p[p/c+1] has (p/c+1)th, ...
@@ -296,12 +319,16 @@ void replicateA(SparseMatrix &m, vector<int> &nnzs) {
 
 
 DenseMatrix generateBFragment() {
-    if (Flags::use_inner) {
-        throw ShouldNotBeCalled("B generation for innerABC");
-    } else {
-        return DenseMatrix(Flags::size, colAPartSize(false, Flags::rank),
-                0, colAPartStart(false, Flags::rank),
+    if (!Flags::use_inner) {
+        return DenseMatrix(Flags::size, partASize(false, Flags::rank),
+                0, partAStart(false, Flags::rank),
                 generate_double, Flags::gen_seed);
+    } else {
+        int c = Flags::repl;
+        if (c == 1) return DenseMatrix(Flags::size, innerBPartSize(false, Flags::rank),
+                0, innerBPartStart(false, Flags::rank),
+                generate_double, Flags::gen_seed);
+        throw ShouldNotBeCalled("B replication in innerABC");
     }
 }
 

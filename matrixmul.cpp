@@ -33,39 +33,33 @@ int main(int argc, char * argv[]) {
     SparseMatrix A;
     if (isMainProcess() && !readSparseMatrix(Flags::sparse_filename, A))
         return mpi_return(4, "failed to read sparse matrix, exiting");
-    if (DEBUG && isMainProcess()) {
-        DenseMatrix denseA(A);
-        ONE_DBG cerr << "---- unsparsed A ----" << endl << denseA;
-    }
+    if (isMainProcess()) ONE_DBG cerr << "---- whole A ----" << endl << A;
     Flags::size = A.height;  // the matrices are square and equal in size
     COMM_WORLD.Bcast(&Flags::size, 1, MPI::INT, MAIN_PROCESS);  // All processes need the size
     initPartSizes();
     initGroupComms();
 
-    return mpi_return(0, "---- STOP ----");
-
     // ------ scatter data -------
+    COMM_WORLD.Barrier();
     double comm_start =  MPI::Wtime();
     DenseMatrix B = generateBFragment();
+    ONE_DBG cerr << "---- B part ----" << endl << B;
     vector<int> nnzs;
     A = splitAndScatter(A, nnzs);
-    if (DEBUG) {
-        DenseMatrix densePartA(A);
-        ONE_DBG cerr << "---- unsparsed unscattered A ----" << endl;
-        gatherAndShow(densePartA);
-    }
+    ONE_DBG cerr << "---- A part ----" << endl << A;
     if (Flags::repl > 1) {
-        ONE_DBG cerr << "---- part before repl ----" << endl << A;
         replicateA(A, nnzs);
-        ONE_DBG cerr << "---- part  after repl ----" << endl << A;
+        ONE_DBG cerr << "---- A part after repl ----" << endl << A;
     }
-    Multiplicator mult(A, B, nnzs);
     COMM_WORLD.Barrier();
     double comm_end = MPI::Wtime();
     if (isMainProcess())
         cerr << "Initial communication time: " << fixed << (comm_end -  comm_start) << "s" << endl;
 
+    return mpi_return(0, "---- STOP ----");
+
     // ------- compute C -------
+    Multiplicator mult(A, B, nnzs);
     double comp_start = MPI::Wtime();
     DenseMatrix C;
     if (Flags::use_inner) {
@@ -84,7 +78,6 @@ int main(int argc, char * argv[]) {
             gatherAndShow(B);
         }
         ONE_DBG cerr << "---- C ----" << endl;
-        // TODO if use_inner
         gatherAndShow(C);
     }
     if (Flags::count_ge) {

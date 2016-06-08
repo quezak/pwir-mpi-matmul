@@ -86,6 +86,10 @@ int replId();
 int replId(int pid);
 
 
+// id of the rotation group in innerABC
+int innerGroupId();
+int innerGroupId(int pid);
+
 void initGroupComms();
 
 #endif  // UTILS_HPP
