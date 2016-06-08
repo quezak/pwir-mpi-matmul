@@ -44,9 +44,7 @@ bool Flags::parseArgv(int argc, char **argv) {
                 use_inner = true;
                 break;
             case 'f': 
-                if (isMainProcess()) {
-                    sparse_filename = string(optarg);
-                }
+                sparse_filename = string(optarg);
                 break;
             case 'c': 
                 repl = atoi(optarg);
@@ -70,11 +68,19 @@ bool Flags::parseArgv(int argc, char **argv) {
         }
     }
     if (gen_seed == NOT_SET) {
-        cerr << "error: missing seed" << endl;
+        ONE_WORKER cerr << "error: missing seed" << endl;
         return false;
     }
-    if (isMainProcess() && sparse_filename == "") {
-        cerr << "error: missing sparse matrix filename" << endl;
+    if (sparse_filename == "") {
+        ONE_WORKER cerr << "error: missing sparse matrix filename" << endl;
+        return false;
+    }
+    if (use_inner && (procs % (repl*repl))) {
+        ONE_WORKER cerr << "error: in innerABC p should be divisible by c^2" << endl;
+        return false;
+    }
+    if (procs % repl) {
+        ONE_WORKER cerr << "error: p should be divisible by c" << endl;
         return false;
     }
     return true;

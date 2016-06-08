@@ -32,11 +32,13 @@ int main(int argc, char * argv[]) {
 
     // ------- read CSR --------
     SparseMatrix A;
-    if (isMainProcess() && !readSparseMatrix(Flags::sparse_filename, A))
-        return mpi_return(4, "failed to read sparse matrix, exiting");
-    if (isMainProcess()) ONE_DBG cerr << "---- whole A ----" << endl << A;
-    Flags::size = A.height;  // the matrices are square and equal in size
+    if (isMainProcess()) if (readSparseMatrix(Flags::sparse_filename, A)) {
+        Flags::size = A.height;  // the matrices are square and equal in size
+        ONE_DBG cerr << "---- whole A ----" << endl << A;
+    }
     COMM_WORLD.Bcast(&Flags::size, 1, MPI::INT, MAIN_PROCESS);  // All processes need the size
+    if (Flags::size == Flags::NOT_SET)
+        return mpi_return(4, "failed to read sparse matrix, exiting");
     initPartSizes();
     initGroupComms();
 
@@ -54,8 +56,7 @@ int main(int argc, char * argv[]) {
     }
     COMM_WORLD.Barrier();
     double comm_end = MPI::Wtime();
-    if (isMainProcess())
-        cerr << "Initial communication time: " << fixed << (comm_end -  comm_start) << "s" << endl;
+    ONE_WORKER cerr << "Initial communication time: " << fixed << (comm_end -  comm_start) << "s" << endl;
 
     // ------- compute C -------
     Multiplicator mult(A, B, nnzs);
@@ -68,8 +69,7 @@ int main(int argc, char * argv[]) {
     }
     COMM_WORLD.Barrier();
     double comp_end = MPI::Wtime();
-    if (isMainProcess())
-        cerr << "Computation time: " << fixed << (comp_end - comp_start) << "s" << endl;
+    ONE_WORKER cerr << "Computation time: " << fixed << (comp_end - comp_start) << "s" << endl;
 
     // ------- output results -------
     if (Flags::show_results) {
