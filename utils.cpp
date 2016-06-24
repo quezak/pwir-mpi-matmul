@@ -146,7 +146,7 @@ static void initCommsInnerABC() {
     // and the ranks should go as in parts_order in initPartSizesInnerA(), e.g. for p=27, c=3
     // the first group comm should contain [0, 3, 6, 1, 4, 7, 2, 5, 8], in that order.
     int group_id = r / (p/c);
-    int group_rank = ((r % c) * p) + r;  // the ranks don't have to be continous
+    int group_rank = innerAWhichReplGroup(r);  // only one process in group per group comm
     Flags::group_comm = COMM_WORLD.Split(group_id, group_rank);
 }
 
