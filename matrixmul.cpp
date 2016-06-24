@@ -81,6 +81,7 @@ int main(int argc, char * argv[]) {
         if (DEBUG) {  // in debug mode, output everything to stderr to avoid stream mixing
             ONE_DBG cerr << "---- C ----" << endl << whole_C;
         } else {
+            ONE_WORKER cout << whole_C.height << " " << whole_C.width << endl;
             ONE_WORKER cout << whole_C;
         }
     }
